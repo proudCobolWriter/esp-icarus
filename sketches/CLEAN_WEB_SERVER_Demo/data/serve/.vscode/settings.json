@@ -1,0 +1,14 @@
+{
+    "files.autoSave": "off",
+    "editor.formatOnSave": true,
+    "editor.detectIndentation": false,
+    "prettier.endOfLine": "lf",
+    "terminal.integrated.enablePersistentSessions": true,
+    "[javascript][javascriptreact][typescript][typescriptreact]": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode"
+    },
+    "[makefile]": {
+        "editor.insertSpaces": false,
+        "editor.tabSize": 4
+    }
+}

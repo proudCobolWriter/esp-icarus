@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<link rel="icon" href="/favicon.ico" />
+		<title>Dashboard</title>
+		<link href="/style.css" rel="stylesheet" />
+		<link
+			href="https://cesium.com/downloads/cesiumjs/releases/1.141/Build/Cesium/Widgets/widgets.css"
+			rel="stylesheet"
+		/>
+	</head>
+	<body>
+		<div class="visible" id="alt-text">
+			<h1>ESP32 Web Server</h1>
+			<p>Telemetry analysis</p>
+			<span class="loader"></span>
+		</div>
+		<div class="dashboard-container hidden">
+			<header>
+				<div class="logo-area">
+					<h1>ESP32 FC TELEMETRY SYSTEM</h1>
+				</div>
+				<nav>
+					<a href="#earth" class="nav-card active">
+						<svg viewBox="0 0 24 24">
+							<circle cx="12" cy="12" r="10" />
+							<path
+								d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20M2 12h20"
+							/>
+						</svg>
+						<span>Earth Viewer</span>
+					</a>
+
+					<a href="#console" class="nav-card">
+						<svg viewBox="0 0 24 24">
+							<polyline points="4 17 10 11 4 5" />
+							<line x1="12" y1="19" x2="20" y2="19" />
+						</svg>
+						<span>Console</span>
+					</a>
+
+					<a href="#graphs" class="nav-card">
+						<svg viewBox="0 0 24 24">
+							<line x1="18" y1="20" x2="18" y2="10" />
+							<line x1="12" y1="20" x2="12" y2="4" />
+							<line x1="6" y1="20" x2="6" y2="14" />
+						</svg>
+						<span>Graphs</span>
+					</a>
+				</nav>
+			</header>
+			<main>
+				<div class="card">
+					<div class="card-title">Cesium Map Target</div>
+					<div class="text-muted">
+						Your map canvas element container goes here...
+					</div>
+				</div>
+				<div class="card">
+					<div class="card-title">System Status</div>
+					<div class="online-text">ONLINE</div>
+				</div>
+			</main>
+		</div>
+		<div id="cesium-container" class="spa-view"></div>
+		<div id="console-container" class="spa-view">
+			<div id="std-stream">
+				<p class="std-stream-line">
+					[*] Network information for Bbox-31CF9E36
+				</p>
+				<p class="std-stream-line">[+] HTTP Async Server online!</p>
+			</div>
+		</div>
+		<div id="graphs-container" class="spa-view"></div>
+		<!-- <canvas id="myChart" style="width: 100%; max-width: 600px"></canvas> -->
+		<!-- <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.0"></script> -->
+		<script src="https://cesium.com/downloads/cesiumjs/releases/1.141/Build/Cesium/Cesium.js"></script>
+		<script type="module" src="/app.js?v=7"></script>
+	</body>
+</html>

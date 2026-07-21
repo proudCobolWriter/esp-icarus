@@ -1,7 +1,10 @@
 // Look at this example for an even more robust implementation
 // https://github.com/espressif/arduino-esp32/blob/master/libraries/WebServer/examples/WebServer/WebServer.ino
 
+#include "esp_chip_info.h"
 #include "esp_log.h"
+#include "esp_wifi.h"
+
 #include <ArduinoJson.h>
 #include <ESPAsyncWebServer.h>
 #include <HardwareSerial.h>
@@ -26,9 +29,9 @@ const bool IGNORE_WIFI_EVENTS = true;       // disable for debugging
 
 const uint8_t MAX_RETRIES = 5; // max WiFi router initial login attempts
 
-const unsigned short TIMER_DELAY = 5;
-const unsigned short CLEANUP_DELAY = 5;
 const unsigned short GPS_LOG_DELAY = 5;
+const unsigned short CLEANUP_DELAY = 5;
+const unsigned short STATUS_DELAY = 1;
 
 static const int RX_PIN = 16, TX_PIN = 17;
 static const uint8_t SERIAL_PORT = 2; // 0 is used for code uploading and serial monitor, 1 is used on custom
@@ -43,20 +46,25 @@ AsyncWebSocket ws("/ws");
 HardwareSerial gpsSerial(SERIAL_PORT);
 
 JsonDocument liveStream;    // up-to-date sensor information retrieved every
-                            // TIMER_DELAY interval
+                            // GPS_LOG_DELAY interval
 JsonDocument historyStream; // old sensors information retrieved only once upon
                             // socket handshake
 
 TinyGPSPlus gps;
 
+esp_chip_info_t chip_info;
+
+// TASK HANDLES
+
+TaskHandle_t GPSProcessTaskHandle = NULL;
+TaskHandle_t BroadcastStatusTaskHandle = NULL;
+TaskHandle_t WebSocketCleanupTaskHandle = NULL;
+
 // VARIABLES
 
 bool fsOK = false;
 
-unsigned long lastTime = 0;
-unsigned long lastCleanup = 0;
-unsigned long lastHistoryLogTime = 0;
-
+unsigned long lastGpsTime;
 unsigned long epochTime;
 
 // WEB SERVER
@@ -127,14 +135,14 @@ template <typename T> void logPastPoint(T lat, T lon, T alt, unsigned long int t
 	point["epoch"] = time;
 }
 
-String stringifyTelemetry(const JsonDocument &doc) {
+String stringifyDocument(const JsonDocument &doc) {
 	String jsonOutput;
 	jsonOutput.reserve(measureJson(doc) + 1);
 	serializeJson(doc, jsonOutput);
 	return jsonOutput;
 }
 
-void notifyClients() { ws.textAll("SENSORS:" + stringifyTelemetry(liveStream)); }
+void notifyClients() { ws.textAll("SENSORS:" + stringifyDocument(liveStream)); }
 
 constexpr unsigned int imperativeHash(const char *str) {
 	// constexpr needed for switch case statements, because hashes needs to be evaluated at compile time
@@ -200,7 +208,7 @@ void handleWebSocketMessage(AsyncWebSocketClient *client, AwsFrameInfo *info, ui
 			break;
 		}
 		case imperativeHash("retrieveReadings"): {
-			client->text("SENSORS-HISTORY:" + stringifyTelemetry(historyStream));
+			client->text("SENSORS-HISTORY:" + stringifyDocument(historyStream));
 			break;
 		}
 		default:
@@ -330,12 +338,12 @@ void getNetworkInfo() {
 
 		Serial.println("[+] BSSID : " + WiFi.BSSIDstr());
 		Serial.print(F("[+] Gateway IP : "));
-		Serial.println(WiFi.gatewayIP());
+		Serial.println(WiFi.gatewayIP().toString());
 		Serial.print(F("[+] Subnet Mask : "));
-		Serial.println(WiFi.subnetMask());
+		Serial.println(WiFi.subnetMask().toString());
 		Serial.println((String) "[+] RSSI : " + WiFi.RSSI() + " dB");
 		Serial.print(F("[+] ESP32 IP : "));
-		Serial.println(WiFi.localIP());
+		Serial.println(WiFi.localIP().toString());
 	}
 }
 
@@ -411,6 +419,74 @@ void scanWiFi() {
 	// Delete the scan result to free memory for code below.
 	WiFi.scanDelete();
 	Serial.println(F("-------------------------------------"));
+}
+
+void printChipInfo() {
+	Serial.println(F("******************************************************"));
+	Serial.println(F("[*] Printing information about the running chip:"));
+
+	// const int bytes_to_kb = 1000;
+	// const int bytes_to_mb = 1000 * 1000;
+
+	const int bytes_to_kib = 1024;
+	const int bytes_to_mib = 1024 * 1024;
+
+	Serial.printf("[+] Chip name : %s\n", getPrettyChipModel(chip_info.model));
+	Serial.printf("[+] CPU frequency : %u MHz\n", ESP.getCpuFreqMHz());
+	Serial.printf("[+] CPU cores : %d\n", chip_info.cores);
+	Serial.printf("[+] Flash size : %u MiB\n", ESP.getFlashChipSize() / bytes_to_mib);
+	Serial.printf("[+] Free heap size (DRAM) : %u KiB\n", ESP.getFreeHeap() / bytes_to_kib);
+	Serial.printf("[+] Tick rate : %d Hz\n", configTICK_RATE_HZ);
+}
+
+const char *getPrettyChipModel(esp_chip_model_t model) {
+	switch (model) {
+	case CHIP_ESP32:
+		return "ESP32";
+	case CHIP_ESP32S2:
+		return "ESP32-S2";
+	case CHIP_ESP32S3:
+		return "ESP32-S3";
+	case CHIP_ESP32C3:
+		return "ESP32-C3";
+	case CHIP_ESP32C2:
+		return "ESP32-C2";
+	case CHIP_ESP32C6:
+		return "ESP32-C6";
+	case CHIP_ESP32H2:
+		return "ESP32-H2";
+	case CHIP_ESP32P4:
+		return "ESP32-P4";
+	case CHIP_POSIX_LINUX:
+		return "POSIX/Linux Simulator";
+	default:
+		return "Unknown Model";
+	}
+}
+
+const char *getPrettyAuthModeName(wifi_auth_mode_t authmode) {
+	switch (authmode) {
+	case WIFI_AUTH_OPEN:
+		return "Open";
+	case WIFI_AUTH_WEP:
+		return "WEP";
+	case WIFI_AUTH_WPA_PSK:
+		return "WPA";
+	case WIFI_AUTH_WPA2_PSK:
+		return "WPA2";
+	case WIFI_AUTH_WPA_WPA2_PSK:
+		return "WPA/WPA2";
+	case WIFI_AUTH_WPA2_ENTERPRISE:
+		return "WPA2 Enterprise";
+	case WIFI_AUTH_WPA3_PSK:
+		return "WPA3";
+	case WIFI_AUTH_WPA2_WPA3_PSK:
+		return "WPA2/WPA3";
+	case WIFI_AUTH_WAPI_PSK:
+		return "WAPI";
+	default:
+		return "Unknown";
+	}
 }
 
 void WiFiEventHandler(WiFiEvent_t event) { Serial.printf("Got Event: %d\n", event); }
@@ -535,6 +611,33 @@ void displayGPSInfo(decltype(millis()) time) {
 	Serial.println();
 }
 
+void broadcastStatus() {
+	if (WiFi.status() != WL_CONNECTED)
+		return;
+
+	JsonDocument statusDoc;
+	JsonObject wifi = statusDoc["wifi"].to<JsonObject>();
+	JsonObject esp = statusDoc["esp"].to<JsonObject>();
+
+	wifi["name"] = WiFi.BSSIDstr();
+	wifi["gateway"] = WiFi.gatewayIP().toString();
+	wifi["subnetMask"] = WiFi.subnetMask().toString();
+	wifi["localIP"] = WiFi.localIP().toString();
+	wifi["rssi"] = WiFi.RSSI();
+	wifi["encryption"] = "Unknown";
+
+	wifi_ap_record_t ap_record;
+	if (esp_wifi_sta_get_ap_info(&ap_record) == ESP_OK) {
+		wifi["encryption"] = getPrettyAuthModeName(ap_record.authmode);
+	}
+
+	statusDoc["clients"] = ws.count();
+
+	esp["model"] = getPrettyChipModel(chip_info.model);
+
+	ws.textAll("STATUS:" + stringifyDocument(statusDoc));
+}
+
 void setup() {
 	Serial.begin(115200);
 	while (!Serial)
@@ -548,6 +651,9 @@ void setup() {
 	fsOK = true;
 	Serial.println(F("[+] LittleFS mounted successfully."));
 
+	esp_chip_info(&chip_info);
+	printChipInfo();
+
 	initWiFi();
 	delay(500);
 
@@ -559,29 +665,52 @@ void setup() {
 	initWebSocket();
 	initRouteHandling();
 	initWebServer();
+
+	xTaskCreatePinnedToCore(GPSProcessTask, "GPSProcessTask", 8192, NULL, 1, &GPSProcessTaskHandle, 1);
+	xTaskCreatePinnedToCore(BroadcastStatusTask, "BroadcastStatusTask", 8192, NULL, 1, &BroadcastStatusTaskHandle, 1);
+	xTaskCreatePinnedToCore(WebSocketCleanupTask, "WebSocketCleanupTask", 8192, NULL, 1, &WebSocketCleanupTaskHandle,
+	                        1);
+
+    vTaskDelete(NULL);
 }
 
 void loop() {
-	unsigned long time = millis();
+    // Code never reached
+}
 
-	if (time > 15000 && gps.charsProcessed() < 10) {
-		Serial.println(F("[-] No GPS detected: check wiring."));
-		while (true)
-			;
-	}
+void GPSProcessTask(void *parameter) {
+	for (;;) {
+		unsigned long time = millis();
 
-	while (gpsSerial.available() > 0) {
-		if (gps.encode(gpsSerial.read())) {
-			if (time - lastTime > TIMER_DELAY * 1000) {
-				lastTime = millis();
-				Serial.println(F("[+] GPS cycle"));
-				displayGPSInfo(time);
+		if (time > 15000 && gps.charsProcessed() < 10) {
+			Serial.println(F("[-] No GPS detected: check wiring."));
+			vTaskDelete(NULL);
+		}
+
+		while (gpsSerial.available() > 0) {
+			if (gps.encode(gpsSerial.read())) {
+				if (time - lastGpsTime > GPS_LOG_DELAY * 1000) {
+					lastGpsTime = time;
+					Serial.println(F("[+] GPS cycle"));
+					displayGPSInfo(time);
+				}
 			}
 		}
-	}
 
-	if (time - lastCleanup > CLEANUP_DELAY * 1000) {
+		vTaskDelay(pdMS_TO_TICKS(10));
+	}
+}
+
+void BroadcastStatusTask(void *parameter) {
+	for (;;) {
+		broadcastStatus();
+		vTaskDelay(pdMS_TO_TICKS(STATUS_DELAY * 1000));
+	}
+}
+
+void WebSocketCleanupTask(void *parameter) {
+	for (;;) {
 		ws.cleanupClients();
-		lastCleanup = millis();
+		vTaskDelay(pdMS_TO_TICKS(CLEANUP_DELAY * 1000));
 	}
 }

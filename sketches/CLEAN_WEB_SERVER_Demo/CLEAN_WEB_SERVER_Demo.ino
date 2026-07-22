@@ -5,6 +5,8 @@
 #include "esp_log.h"
 #include "esp_wifi.h"
 
+#include "FreeRTOS.h"
+
 #include <ArduinoJson.h>
 #include <ESPAsyncWebServer.h>
 #include <HardwareSerial.h>
@@ -33,10 +35,13 @@ const unsigned short GPS_LOG_DELAY = 5;
 const unsigned short CLEANUP_DELAY = 5;
 const unsigned short STATUS_DELAY = 1;
 
-static const int RX_PIN = 16, TX_PIN = 17;
-static const uint8_t SERIAL_PORT = 2; // 0 is used for code uploading and serial monitor, 1 is used on custom
-// pins only, 2 is more versatile
-static const uint32_t GPS_BAUD = 9600;
+const int RX_PIN = 16, TX_PIN = 17;
+const uint8_t SERIAL_PORT = 2; // 0 is used for code uploading and serial monitor, 1 is used on custom
+                               // pins only, 2 is more versatile
+const uint32_t GPS_BAUD = 9600;
+
+const bool SYSTEM_MONITORING_DEBUG = true; // decides whether or not we print every STATUS_DELAY second a detailed
+                                           // overview of all the running tasks on the system
 
 // INSTANTIATING
 
@@ -56,9 +61,25 @@ esp_chip_info_t chip_info;
 
 // TASK HANDLES
 
+TaskHandle_t SysMonTaskHandle = NULL;
 TaskHandle_t GPSProcessTaskHandle = NULL;
 TaskHandle_t BroadcastStatusTaskHandle = NULL;
 TaskHandle_t WebSocketCleanupTaskHandle = NULL;
+
+QueueHandle_t telemetryQueue;
+
+// STRUCT DEFS
+
+struct TaskRunTimeState {
+	TaskHandle_t handle;
+	uint32_t lastRunTime;
+};
+
+struct SystemTelemetry {
+	float totalCpuLoad;
+	uint32_t activeTaskCount;
+	uint32_t freeHeapBytes;
+};
 
 // VARIABLES
 
@@ -638,6 +659,8 @@ void broadcastStatus() {
 	ws.textAll("STATUS:" + stringifyDocument(statusDoc));
 }
 
+bool strPrefix(const char *pre, const char *str) { return strncmp(pre, str, strlen(pre)) == 0; }
+
 void setup() {
 	Serial.begin(115200);
 	while (!Serial)
@@ -666,19 +689,22 @@ void setup() {
 	initRouteHandling();
 	initWebServer();
 
+	telemetryQueue = xQueueCreate(1, sizeof(SystemTelemetry));
+
 	xTaskCreatePinnedToCore(GPSProcessTask, "GPSProcessTask", 8192, NULL, 1, &GPSProcessTaskHandle, 1);
 	xTaskCreatePinnedToCore(BroadcastStatusTask, "BroadcastStatusTask", 8192, NULL, 1, &BroadcastStatusTaskHandle, 1);
 	xTaskCreatePinnedToCore(WebSocketCleanupTask, "WebSocketCleanupTask", 8192, NULL, 1, &WebSocketCleanupTaskHandle,
 	                        1);
+	xTaskCreatePinnedToCore(SysMonTask, "SysMonTask", 4096, NULL, 1, &SysMonTaskHandle, 0);
 
-    vTaskDelete(NULL);
+	vTaskDelete(NULL);
 }
 
 void loop() {
-    // Code never reached
+	// Code never reached
 }
 
-void GPSProcessTask(void *parameter) {
+void GPSProcessTask(void *pvParameters) {
 	for (;;) {
 		unsigned long time = millis();
 
@@ -701,16 +727,141 @@ void GPSProcessTask(void *parameter) {
 	}
 }
 
-void BroadcastStatusTask(void *parameter) {
-	for (;;) {
-		broadcastStatus();
-		vTaskDelay(pdMS_TO_TICKS(STATUS_DELAY * 1000));
-	}
-}
-
-void WebSocketCleanupTask(void *parameter) {
+void WebSocketCleanupTask(void *pvParameters) {
 	for (;;) {
 		ws.cleanupClients();
 		vTaskDelay(pdMS_TO_TICKS(CLEANUP_DELAY * 1000));
+	}
+}
+
+void BroadcastStatusTask(void *pvParameters) {
+	SystemTelemetry received_data;
+
+	for (;;) {
+		if (telemetryQueue != NULL) {
+			if (xQueueReceive(telemetryQueue, &received_data, portMAX_DELAY) == pdTRUE) {
+				if (SYSTEM_MONITORING_DEBUG)
+					Serial.printf("TOTAL CPU USAGE: %.1f%%\n", received_data.totalCpuLoad);
+				broadcastStatus();
+			};
+		} else {
+			vTaskDelay(pdMS_TO_TICKS(100));
+		}
+	}
+}
+
+void SysMonTask(void *pvParameters) {
+	uint32_t oldUlTotalRunTime = 0;
+
+	static std::vector<TaskRunTimeState> history;
+
+	for (;;) {
+		UBaseType_t uxArraySize = uxTaskGetNumberOfTasks();
+
+		TaskStatus_t *pxTaskStatusArray = (TaskStatus_t *)pvPortMalloc(uxArraySize * sizeof(TaskStatus_t));
+		TaskSnapshot_t *pxTaskSnapshotArray = (TaskSnapshot_t *)pvPortMalloc(uxArraySize * sizeof(TaskSnapshot_t));
+
+		if (pxTaskStatusArray != NULL && pxTaskSnapshotArray != NULL) {
+			uint32_t ulTotalRunTime;
+			uxArraySize = uxTaskGetSystemState(pxTaskStatusArray, uxArraySize, &ulTotalRunTime);
+
+			const uint32_t totalSystemDelta = ulTotalRunTime - oldUlTotalRunTime;
+
+			UBaseType_t tcbSize;
+			uxTaskGetSnapshotAll(pxTaskSnapshotArray, uxArraySize, &tcbSize);
+
+			Serial.println(
+			    F("------------------------------ FREE RTOS TASK MONITOR SNAPSHOT -------------------------------"));
+			Serial.printf("%-20s | %-4s | %-9s | %-8s | %-12s | %-12s | %-12s\n", "Task Name", "Core", "CPU Usage",
+			              "Priority", "Alloc Stack", "Free Stack", "Stack Usage");
+			Serial.println(
+			    F("----------------------------------------------------------------------------------------------"));
+
+			float totalCpuPercent = 0.0f;
+
+			for (UBaseType_t i = 0; i < uxArraySize; i++) {
+				const TaskStatus_t &status = pxTaskStatusArray[i];
+				uint32_t totalStackBytes = 0;
+
+				for (UBaseType_t j = 0; j < uxArraySize; j++) {
+					if (pxTaskSnapshotArray[j].pxTCB == status.xHandle) {
+						totalStackBytes =
+						    (uintptr_t)pxTaskSnapshotArray[j].pxEndOfStack - (uintptr_t)status.pxStackBase;
+						break;
+					}
+				}
+
+				const UBaseType_t freeStack = status.usStackHighWaterMark;
+				const UBaseType_t allocatedStack = totalStackBytes;
+				const UBaseType_t usedBytesStack = (allocatedStack > freeStack) ? (allocatedStack - freeStack) : 0;
+				const float usedPercent =
+				    (allocatedStack > 0) ? ((float)usedBytesStack / allocatedStack) * 100.0f : 0.0f;
+
+				constexpr UBaseType_t invalidCoreInt = 2147483647;
+				int8_t core = (status.xCoreID == invalidCoreInt) ? -1 : status.xCoreID;
+
+				uint32_t prevRunTime = 0;
+				bool foundInHistory = false;
+
+				for (TaskRunTimeState &record : history) {
+					if (record.handle == status.xHandle) {
+						prevRunTime = record.lastRunTime;
+						record.lastRunTime = status.ulRunTimeCounter;
+						foundInHistory = true;
+						break;
+					}
+				}
+
+				if (!foundInHistory) {
+					history.push_back({status.xHandle, status.ulRunTimeCounter});
+					prevRunTime = status.ulRunTimeCounter;
+				}
+
+				float cpuPercent = 0.0f;
+				if (totalSystemDelta > 0 && status.ulRunTimeCounter >= prevRunTime) {
+					const uint32_t taskDelta = status.ulRunTimeCounter - prevRunTime;
+					cpuPercent = (((float)taskDelta / (float)totalSystemDelta * 100.0f) /
+					              portNUM_PROCESSORS); // portNUM_PROCESSORS should be equal to 2 with the Xtensa ESP32
+					                                   // CPU. It normalizes the total system load.
+				}
+
+				if (!strPrefix("IDLE", status.pcTaskName)) {
+					totalCpuPercent += cpuPercent;
+
+					if (SYSTEM_MONITORING_DEBUG) {
+						Serial.printf("%-20s | %-4d | %8.1f%% | %-8u | %-10u B | %-10u B | %10.1f%%\n",
+						              status.pcTaskName, core, cpuPercent, status.uxCurrentPriority, allocatedStack,
+						              usedBytesStack, usedPercent);
+					}
+				}
+			}
+
+			for (std::vector<TaskRunTimeState>::iterator it = history.begin(); it != history.end();) {
+				bool stillAlive = false;
+
+				for (UBaseType_t i = 0; i < uxArraySize; i++) {
+					if (pxTaskStatusArray[i].xHandle == it->handle) {
+						stillAlive = true;
+						break;
+					}
+				}
+
+				if (!stillAlive) {
+					it = history.erase(it);
+				} else {
+					++it;
+				}
+			}
+
+			vPortFree(pxTaskStatusArray);
+			vPortFree(pxTaskSnapshotArray);
+
+			oldUlTotalRunTime = ulTotalRunTime;
+
+			SystemTelemetry data = {totalCpuPercent, uxArraySize, ESP.getFreeHeap()};
+			xQueueOverwrite(telemetryQueue, &data);
+		}
+
+		vTaskDelay(pdMS_TO_TICKS(STATUS_DELAY * 1000));
 	}
 }

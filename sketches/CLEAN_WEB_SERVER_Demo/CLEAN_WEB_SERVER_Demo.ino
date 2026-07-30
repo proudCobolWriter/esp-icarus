@@ -11,6 +11,7 @@
 #include <ESPAsyncWebServer.h>
 #include <HardwareSerial.h>
 #include <LittleFS.h>
+#include <QMC5883LCompass.h>
 #include <TinyGPSPlus.h>
 #include <WiFi.h>
 #include <time.h>
@@ -40,8 +41,8 @@ const uint8_t SERIAL_PORT = 2; // 0 is used for code uploading and serial monito
                                // pins only, 2 is more versatile
 const uint32_t GPS_BAUD = 9600;
 
-const bool SYSTEM_MONITORING_DEBUG = true; // decides whether or not we print every STATUS_DELAY second a detailed
-                                           // overview of all the running tasks on the system
+const bool SYSTEM_MONITORING_DEBUG = false; // decides whether or not we print every STATUS_DELAY second a detailed
+                                            // overview of all the running tasks on the system
 
 // INSTANTIATING
 
@@ -56,6 +57,7 @@ JsonDocument historyStream; // old sensors information retrieved only once upon
                             // socket handshake
 
 TinyGPSPlus gps;
+QMC5883LCompass compass;
 
 esp_chip_info_t chip_info;
 
@@ -63,6 +65,7 @@ esp_chip_info_t chip_info;
 
 TaskHandle_t SysMonTaskHandle = NULL;
 TaskHandle_t GPSProcessTaskHandle = NULL;
+TaskHandle_t CompassProcessTaskHandle = NULL;
 TaskHandle_t BroadcastStatusTaskHandle = NULL;
 TaskHandle_t WebSocketCleanupTaskHandle = NULL;
 
@@ -572,6 +575,18 @@ void initGPS() {
 	Serial.println(F("---------------------------------------------------------"));
 }
 
+void initCompass() {
+	compass.init();                          // handles 0x0B and 0x09 registers internally
+	compass.setMode(0x01, 0x00, 0x10, 0x00); // check the library documentation or the chip's manual for information
+	// compass.setCalibration(-1442, -27, -1567, -243, -1000, 1000);
+
+	Serial.println(F("---------------------------------------------------------"));
+	Serial.println(F("[+] QMC5883L Magnetometer module has been initialized"));
+	Serial.println(F("[+] Using library QMC5883LCompass 1.2.3"));
+	Serial.println(F("[+] by MPrograms"));
+	Serial.println(F("---------------------------------------------------------"));
+}
+
 void displayGPSInfo(decltype(millis()) time) {
 	Serial.print(F("Location: "));
 	if (gps.location.isValid()) {
@@ -684,6 +699,7 @@ void setup() {
 	initSensorJson();
 
 	initGPS();
+	initCompass();
 
 	initWebSocket();
 	initRouteHandling();
@@ -692,6 +708,7 @@ void setup() {
 	telemetryQueue = xQueueCreate(1, sizeof(SystemTelemetry));
 
 	xTaskCreatePinnedToCore(GPSProcessTask, "GPSProcessTask", 8192, NULL, 1, &GPSProcessTaskHandle, 1);
+	xTaskCreatePinnedToCore(CompassProcessTask, "CompassProcessTask", 8192, NULL, 1, &CompassProcessTaskHandle, 1);
 	xTaskCreatePinnedToCore(BroadcastStatusTask, "BroadcastStatusTask", 8192, NULL, 1, &BroadcastStatusTaskHandle, 1);
 	xTaskCreatePinnedToCore(WebSocketCleanupTask, "WebSocketCleanupTask", 8192, NULL, 1, &WebSocketCleanupTaskHandle,
 	                        1);
@@ -724,6 +741,15 @@ void GPSProcessTask(void *pvParameters) {
 		}
 
 		vTaskDelay(pdMS_TO_TICKS(10));
+	}
+}
+
+void CompassProcessTask(void *pvParameters) {
+	for (;;) {
+		compass.read();
+		Serial.println(compass.getAzimuth());
+
+        vTaskDelay(pdMS_TO_TICKS(250));
 	}
 }
 
@@ -770,12 +796,14 @@ void SysMonTask(void *pvParameters) {
 			UBaseType_t tcbSize;
 			uxTaskGetSnapshotAll(pxTaskSnapshotArray, uxArraySize, &tcbSize);
 
-			Serial.println(
-			    F("------------------------------ FREE RTOS TASK MONITOR SNAPSHOT -------------------------------"));
-			Serial.printf("%-20s | %-4s | %-9s | %-8s | %-12s | %-12s | %-12s\n", "Task Name", "Core", "CPU Usage",
-			              "Priority", "Alloc Stack", "Free Stack", "Stack Usage");
-			Serial.println(
-			    F("----------------------------------------------------------------------------------------------"));
+			if (SYSTEM_MONITORING_DEBUG) {
+				Serial.println(F(
+				    "------------------------------ FREE RTOS TASK MONITOR SNAPSHOT -------------------------------"));
+				Serial.printf("%-20s | %-4s | %-9s | %-8s | %-12s | %-12s | %-12s\n", "Task Name", "Core", "CPU Usage",
+				              "Priority", "Alloc Stack", "Free Stack", "Stack Usage");
+				Serial.println(F(
+				    "----------------------------------------------------------------------------------------------"));
+			}
 
 			float totalCpuPercent = 0.0f;
 

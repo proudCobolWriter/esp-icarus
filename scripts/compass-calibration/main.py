@@ -11,7 +11,7 @@ from queue import Queue
 # CONSTANTS
 
 BAUD_RATE = 115200
-MAX_POINTS = 250
+MAX_POINTS = 1000
 REFRESH_RATE = 10  # how many times a second the GUI updates (=/= sensor polling rate)
 
 # ENDOFCONSTANTS

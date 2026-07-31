@@ -279,9 +279,15 @@ class CompassGUI:
 
     def computeEnveloppeCentroid(self):
         # we add to the current center to keep track of the offset, because the sensor itself, is not calibrated
-        self.xCenter += (self.xmax + self.xmin) / 2
-        self.yCenter += (self.ymax + self.ymin) / 2
-        self.zCenter += (self.zmax + self.zmin) / 2
+        offsetX, offsetY, offsetZ = (
+            (self.xmax + self.xmin) / 2,
+            (self.ymax + self.ymin) / 2,
+            (self.zmax + self.zmin) / 2,
+        )
+        self.xCenter += offsetX
+        self.yCenter += offsetY
+        self.zCenter += offsetZ
+        return (offsetX, offsetY, offsetZ)
 
     def done(self):
         self.computeAllBounds()
@@ -302,11 +308,11 @@ class CompassGUI:
         if self.thread.is_alive():
             return
 
-        self.computeEnveloppeCentroid()
+        offsetX, offsetY, offsetZ = self.computeEnveloppeCentroid()
 
-        self.requeueWOffset(self.xy_data, self.xCenter, self.yCenter)
-        self.requeueWOffset(self.yz_data, self.yCenter, self.zCenter)
-        self.requeueWOffset(self.zx_data, self.zCenter, self.xCenter)
+        self.requeueWOffset(self.xy_data, offsetX, offsetY)
+        self.requeueWOffset(self.yz_data, offsetY, offsetZ)
+        self.requeueWOffset(self.zx_data, offsetZ, offsetX)
 
         self.computeAllBounds()
         self.computeEnveloppeCentroid()

@@ -1,5 +1,5 @@
 import serial.tools.list_ports
-import threading, time, sys, os
+import threading, random, time, sys, os
 
 import matplotlib.widgets as widgets
 import matplotlib.pyplot as plt
@@ -12,6 +12,7 @@ from queue import Queue
 
 BAUD_RATE = 115200
 MAX_POINTS = 250
+REFRESH_RATE = 10  # how many times a second the GUI updates (=/= sensor polling rate)
 
 # ENDOFCONSTANTS
 
@@ -131,11 +132,26 @@ class CompassGUI:
             family="monospace",
         )
 
+        self.xCenter, self.yCenter, self.zCenter = 0, 0, 0
+
+        self.should_finish = False
+        self.update_required = True
         self.update()
+
+        interval = int(1 / REFRESH_RATE * 1000)
+
+        self.timer = self.fig.canvas.new_timer(interval)
+        self.timer.add_callback(self.update)
+        self.timer.start()
 
     def start(self, _):
         if self.is_running:
             return
+
+        self.set_btn_calib(False)  # remove that calib button
+
+        if self.mcu.is_open:
+            self.mcu.reset_input_buffer()
 
         self.is_running = True
         print("Started")
@@ -159,30 +175,37 @@ class CompassGUI:
                 q.all_tasks_done.notify_all()
                 q.not_full.notify_all()
 
-        self.update()
+        self.xCenter, self.yCenter, self.zCenter = 0, 0, 0
+
+        self.update_required = True
 
     def update(self):
-        self.x_cloud.set_data(
-            [coord[0] for coord in self.xy_data.queue],
-            [coord[1] for coord in self.xy_data.queue],
-        )
-        self.y_cloud.set_data(
-            [coord[0] for coord in self.yz_data.queue],
-            [coord[1] for coord in self.yz_data.queue],
-        )
-        self.z_cloud.set_data(
-            [coord[0] for coord in self.zx_data.queue],
-            [coord[1] for coord in self.zx_data.queue],
-        )
+        if getattr(self, "should_finish"):
+            self.should_finish = False
+            self.done()
+            return
+
+        if not self.update_required:
+            return
+
+        with self.xy_data.mutex, self.yz_data.mutex, self.zx_data.mutex:
+            xy_snapshot = list(self.xy_data.queue)
+            yz_snapshot = list(self.yz_data.queue)
+            zx_snapshot = list(self.zx_data.queue)
+
+        self.x_cloud.set_data([c[0] for c in xy_snapshot], [c[1] for c in xy_snapshot])
+        self.y_cloud.set_data([c[0] for c in yz_snapshot], [c[1] for c in yz_snapshot])
+        self.z_cloud.set_data([c[0] for c in zx_snapshot], [c[1] for c in zx_snapshot])
 
         self.ax.relim()
         self.ax.autoscale_view()
         self.ax.set_aspect("equal", "box")
 
         self.fig.canvas.draw_idle()
-        self.fig.canvas.flush_events()
 
         self.points_text.set_text(f"Points:\n{self.xy_data.qsize()}/{MAX_POINTS}")
+
+        self.update_required = False
 
     def listen_serial(self):
         try:
@@ -206,21 +229,24 @@ class CompassGUI:
                         mag_values = values[6:]
                         x, y, z = [int(v) for v in mag_values]
 
-                        if hasattr(self, "xCenter"):
-                            x -= self.xCenter
-                            y -= self.yCenter
-                            z -= self.zCenter
+                        x -= self.xCenter
+                        y -= self.yCenter
+                        z -= self.zCenter
 
                         if self.xy_data.full():
-                            self.xy_data.get()
-                            self.yz_data.get()
-                            self.zx_data.get()
+                            with self.xy_data.mutex, self.yz_data.mutex, self.zx_data.mutex:
+                                if len(self.xy_data.queue) > 0:
+                                    self.xy_data.queue.popleft()
+                                if len(self.yz_data.queue) > 0:
+                                    self.yz_data.queue.popleft()
+                                if len(self.zx_data.queue) > 0:
+                                    self.zx_data.queue.popleft()
 
                         self.xy_data.put((x, y))
                         self.yz_data.put((y, z))
                         self.zx_data.put((z, x))
 
-                        self.update()
+                        self.update_required = True
                     except ValueError:
                         print("Wrong line!")
                         continue
@@ -228,68 +254,94 @@ class CompassGUI:
             print("Serial bridge was broken!")
         finally:
             print("Worker thread stopped")
-            self.done()
+            self.should_finish = True
+            self.update_required = False
 
     def queueBounds(self, q):
-        if len(q.queue) == 0:
-            return 0.0, 0.0
-        values = [v[0] for v in q.queue]
-        return min(values), max(values)
+        with q.mutex:
+            if len(q.queue) == 0:
+                return 0.0, 0.0
+            values = [v[0] for v in q.queue]
+            return min(values), max(values)
 
     def requeueWOffset(self, q, offset1, offset2):
-        coords_pool = []
+        with q.mutex:
+            coords_pool = list(q.queue)
+            q.queue.clear()
 
-        while q.empty():
-            coords_pool.append(q.get())
+            for c1, c2 in coords_pool:
+                q.queue.append((c1 - offset1, c2 - offset2))
 
-        for coord in coords_pool:
-            c1, c2 = coord
-            q.put((c1 - offset1, c2 - offset2))
+    def computeAllBounds(self):
+        self.xmin, self.xmax = self.queueBounds(self.xy_data)
+        self.ymin, self.ymax = self.queueBounds(self.yz_data)
+        self.zmin, self.zmax = self.queueBounds(self.zx_data)
+
+    def computeEnveloppeCentroid(self):
+        self.xCenter, self.yCenter, self.zCenter = (
+            (self.xmax + self.xmin) / 2,
+            (self.ymax + self.ymin) / 2,
+            (self.zmax + self.zmin) / 2,
+        )
 
     def done(self):
-        xmin, xmax = self.queueBounds(self.xy_data)
-        ymin, ymax = self.queueBounds(self.yz_data)
-        zmin, zmax = self.queueBounds(self.zx_data)
+        self.computeAllBounds()
 
         printsep()
         print("Calibration results:")
         print(
-            f"X enveloppe: {xmin} - {xmax} | Y enveloppe: {ymin} - {ymax} | Z enveloppe: {zmin} - {zmax}"
+            f"X enveloppe: {self.xmin} - {self.xmax} | Y enveloppe: {self.ymin} - {self.ymax} | Z enveloppe: {self.zmin} - {self.zmax}"
         )
-        print(f"Raw:{xmin},{xmax},{ymin},{ymax},{zmin},{zmax}")
+        print(
+            f"Raw:{self.xmin},{self.xmax},{self.ymin},{self.ymax},{self.zmin},{self.zmax}"
+        )
         printsep()
 
-        self.xCenter, self.yCenter, self.zCenter = (
-            (xmax + xmin) / 2,
-            (ymax + ymin) / 2,
-            (zmax + zmin) / 2,
-        )
+        self.set_btn_calib()  # creates the calib button
 
-        ax_calib = self.fig.add_axes(
-            (
-                self.ax.get_position().x1 + self.constants["btn_width"],
-                self.constants["btn_y"],
-                self.constants["btn_width"],
-                self.constants["btn_height"],
-            )
-        )
-
-        self.btn_calib = widgets.Button(ax_calib, "Calibrate")
-        self.btn_calib.on_clicked(self.recenter)
-
-        self.fig.canvas.draw_idle()
-
-    def recenter(self, _):
-        if not self.xCenter or self.thread.is_alive():
+    def calibrate(self, _):
+        if self.thread.is_alive():
             return
+
+        self.computeEnveloppeCentroid()
 
         self.requeueWOffset(self.xy_data, self.xCenter, self.yCenter)
         self.requeueWOffset(self.yz_data, self.yCenter, self.zCenter)
         self.requeueWOffset(self.zx_data, self.zCenter, self.xCenter)
 
+        self.computeAllBounds()
+        self.computeEnveloppeCentroid()
+
+        self.update_required = True
         print("Recalculated point positions")
 
-        self.update()
+    def set_btn_calib(self, active=True):
+        if active == True:
+            if hasattr(self, "btn_calib"):
+                return
+
+            pos = self.ax.get_position()
+            pos_right = pos.x1
+
+            ax_calib = self.fig.add_axes(
+                (
+                    pos_right + self.constants["btn_width"],
+                    self.constants["btn_y"],
+                    self.constants["btn_width"],
+                    self.constants["btn_height"],
+                )
+            )
+
+            self.btn_calib = widgets.Button(ax_calib, "Calibrate")
+            self.btn_calib.on_clicked(self.calibrate)
+        else:
+            if not hasattr(self, "btn_calib"):
+                return
+
+            self.btn_calib.ax.remove()
+            del self.btn_calib
+
+        self.fig.canvas.draw_idle()
 
 
 def main():

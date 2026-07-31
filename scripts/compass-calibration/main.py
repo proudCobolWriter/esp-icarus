@@ -278,11 +278,10 @@ class CompassGUI:
         self.zmin, self.zmax = self.queueBounds(self.zx_data)
 
     def computeEnveloppeCentroid(self):
-        self.xCenter, self.yCenter, self.zCenter = (
-            (self.xmax + self.xmin) / 2,
-            (self.ymax + self.ymin) / 2,
-            (self.zmax + self.zmin) / 2,
-        )
+        # we add to the current center to keep track of the offset, because the sensor itself, is not calibrated
+        self.xCenter += (self.xmax + self.xmin) / 2
+        self.yCenter += (self.ymax + self.ymin) / 2
+        self.zCenter += (self.zmax + self.zmin) / 2
 
     def done(self):
         self.computeAllBounds()

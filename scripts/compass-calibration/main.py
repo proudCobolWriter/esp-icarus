@@ -227,7 +227,7 @@ class CompassGUI:
                             continue
 
                         mag_values = values[6:]
-                        x, y, z = [int(v) for v in mag_values]
+                        x, y, z = [float(v) for v in mag_values]
 
                         x -= self.xCenter
                         y -= self.yCenter

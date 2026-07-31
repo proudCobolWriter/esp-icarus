@@ -57,7 +57,9 @@ class CompassGUI:
 
         plt.ion()
 
-        self.fig, self.ax = plt.subplots(figsize=(10, 7))
+        self.fig, self.ax = plt.subplots(
+            figsize=(10, 7), num="Hard-iron Compasss Calibration"
+        )
 
         plt.subplots_adjust(left=0.15, bottom=0.2, right=0.85)  # room for the buttons
 

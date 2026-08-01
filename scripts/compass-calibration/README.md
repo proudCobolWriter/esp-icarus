@@ -16,4 +16,8 @@ If you want to find the soft-iron calibration matrix of dim(M)=3, refer to the [
 ## Images:
 
 ![figure2](./examples/Figure_2.png "Figure 2")
+<p align="center">Raw data gathering</p>
 ![figure3](./examples/Figure_3.png "Figure 3")
+<p align="center">Hard-iron calibration</p>
+![figure3](./examples/Figure_3.png "Figure 5")
+<p align="center">Soft-iron calibration</p>

@@ -1,11 +1,7 @@
-#include <map>
-
 #define X_AXIS_PIN 32
 #define Y_AXIS_PIN 33
 
 constexpr uint8_t SAMPLE_SIZE = 10;
-constexpr uint8_t LINEARIZATION_STEPS = 101; // uneven number to have an integer median value
-
 typedef uint8_t r_arr[SAMPLE_SIZE];
 
 r_arr x_readings = {0};
@@ -13,9 +9,6 @@ r_arr y_readings = {0};
 
 uint8_t calibration_offsets[2] = {0, 0};
 float calibration_scales[2] = {1.0f, 1.0f};
-
-float x_linearization_factors[LINEARIZATION_STEPS] = {1.0f};
-float y_linearization_factors[LINEARIZATION_STEPS] = {1.0f};
 
 void setup() {
 	Serial.begin(115200);
@@ -46,8 +39,8 @@ void calibrate() {
 	uint8_t x_min, x_max, y_min, y_max;
 	x_min = x_max = y_min = y_max = 128;
 
-	unsigned long last_timestamp = millis();
-	unsigned long time_elapsed = 0;
+	uint32_t start_timestamp = millis();
+	uint16_t time_elapsed = 0;
 
 	while (time_elapsed < 5000) {
 		uint8_t x = analogRead(X_AXIS_PIN);
@@ -71,11 +64,7 @@ void calibrate() {
 
 		delay(10);
 
-		unsigned long current_timestamp = millis();
-		unsigned long delta = current_timestamp - last_timestamp;
-		last_timestamp = current_timestamp;
-
-		time_elapsed += delta;
+		time_elapsed = millis() - start_timestamp;
 	}
 
 	Serial.printf("Found the following extremums: X-min: %d | X-max: %d\n", x_min, x_max);
@@ -108,66 +97,16 @@ void calibrate() {
 	calibration_scales[0] = x_scale;
 	calibration_scales[1] = y_scale;
 
-	Serial.println(
-	    F("Next calibration step. Push the joystick in a single direction at a constant rate for 5 seconds"));
-
-	unsigned long start_timestamp = millis();
-	unsigned long duration = 0;
-
-	std::map<uint32_t, float> readings_dict;
-
-	while (true) {
-		int16_t x = analogRead(X_AXIS_PIN);
-		int16_t y = analogRead(Y_AXIS_PIN);
-
-		applyOffsets(&x, &y, false);
-
-		if (abs(y) <= 128.0f * 0.05f)
-			continue;
-
-		float percent = y / 128.0f;
-
-		duration = millis() - start_timestamp;
-
-		readings_dict.insert(std::pair<uint32_t, float>(duration, percent));
-
-		if (abs(y) >= 128.0f * 0.95f)
-			break;
-
-		delay(100);
-	}
-
-	if (duration > 0) {
-		for (auto it : readings_dict) {
-			uint32_t key = it.first;
-			float value = it.second;
-
-			int16_t index = round((value / 2.0f + 0.5f) * (LINEARIZATION_STEPS - 1));
-
-			if (index < 0) {
-				index = 0;
-			} else if (index > LINEARIZATION_STEPS - 1) {
-				index = LINEARIZATION_STEPS - 1;
-			}
-
-			float progress = ((float)key / duration) * 2.0f - 1.0f;
-			float factor = (value != 0.0f) ? progress / value : 1.0f;
-
-			Serial.println(index);
-			Serial.println(progress);
-			Serial.println(value);
-			Serial.println(factor);
-			Serial.println(F("-----"));
-
-			y_linearization_factors[index] = factor;
-		}
-	}
-
 	Serial.println(F("Calibration run complete!"));
 	Serial.println(F("---------------------------------------------------"));
 	Serial.printf("Middle at X: %d | Y: %d\n", x_mid, y_mid);
 	Serial.printf("Value ranges: X: %d wide | Y: %d wide\n", x_avg_delta * 2, y_avg_delta * 2);
 	Serial.printf("Scale factors: X: %.2f | Y: %.2f\n", x_scale, y_scale);
+}
+
+template<typename T>
+T clamp(const T v, const T min, const T max) {
+    return (v <= min) ? min : ((v >= max) ? max : v);
 }
 
 void insert_at(r_arr arr, uint8_t n, uint8_t pos, uint8_t val) {
@@ -206,54 +145,25 @@ float get_variance(const r_arr arr, uint8_t n, float mean) {
 	return sumSquaredDifferences / (n - 1);
 }
 
-void applyOffsets(int16_t *x, int16_t *y, bool applyLinearization) {
-	(*x) -= calibration_offsets[0];
-	(*y) -= calibration_offsets[1];
+void applyOffsets(int8_t *x, int8_t *y) {
+    constexpr int8_t max_bound = 127;
+    constexpr int8_t min_bound = -128;
 
-	(*x) *= calibration_scales[0];
-	(*y) *= calibration_scales[1];
+    int8_t x_offseted = (*x) + calibration_offsets[0];
+    int8_t y_offseted = (*y) + calibration_offsets[1];
 
-	if (!applyLinearization)
-		return;
+    int8_t x_scaled = x_offseted * calibration_scales[0];
+    int8_t y_scaled = y_offseted * calibration_scales[1];
 
-	int16_t index = round((((*y) / 128.0f) / 2.0f + 0.5f) * (LINEARIZATION_STEPS - 1));
-
-    Serial.println(index);
-
-	if (index < 0) {
-		index = 0;
-	} else if (index > LINEARIZATION_STEPS - 1) {
-		index = LINEARIZATION_STEPS - 1;
-	}
-
-    Serial.println(index);
-
-	int16_t i1 = index;
-    int16_t i2 = index;
-
-	while (y_linearization_factors[i1] == 1.0f && y_linearization_factors[i2] == 1.0f) {
-		i1 -= 1;
-		i2 += 1;
-	}
-
-	if (y_linearization_factors[i1] == 1.0f) {
-		index = i2;
-	} else {
-        index = i1;
-    }
-
-    Serial.println(index);
-
-	(*y) *= y_linearization_factors[index];
-
-    Serial.println(y_linearization_factors[index]);
+	(*x) = x_scaled;//clamp<int8_t>(x_scaled, min_bound, max_bound);
+	(*y) = y_scaled;//clamp<int8_t>(y_scaled, min_bound, max_bound);
 }
 
 void loop() {
 	int16_t x = analogRead(X_AXIS_PIN);
 	int16_t y = analogRead(Y_AXIS_PIN);
 
-	applyOffsets(&x, &y, true);
+	applyOffsets(&x, &y);
 
 	insert_at(x_readings, SAMPLE_SIZE, 0, x);
 	insert_at(y_readings, SAMPLE_SIZE, 0, y);
@@ -265,8 +175,8 @@ void loop() {
 	float y_variance = get_variance(y_readings, SAMPLE_SIZE, y_mean);
 
 	Serial.printf("X:%d\nY:%d\n", x, y);
-	Serial.printf("Average_X:%.2f\nAverage_Y:%.2f\n", x_mean, y_mean);
-	Serial.printf("Variance_X:%.2f\nVariance_Y:%.2f\n", x_variance, y_variance);
+	//Serial.printf("Average_X:%.2f\nAverage_Y:%.2f\n", x_mean, y_mean);
+	//Serial.printf("Variance_X:%.2f\nVariance_Y:%.2f\n", x_variance, y_variance);
 
 	delay(100);
 }

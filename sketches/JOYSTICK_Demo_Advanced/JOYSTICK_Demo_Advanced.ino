@@ -2,6 +2,10 @@
 // the arbitrary unit analogRead returns should be dropped and mV/V used
 // https://github.com/G6EJD/ESP32-ADC-Accuracy-Improvement-function/blob/master/ESP32_ADC_Read_Voltage_Accurate.ino
 
+// Another thing that I could do to improve the accuracy is introducing scale factors for both sides of the axes
+// To do so I'd need to turn the calibration_scales array into a 2x2 matrix essentially, calculate some more deltas,
+// edit the applyOffsets function and voila, but cba to do it rn
+
 #define X_AXIS_PIN 32
 #define Y_AXIS_PIN 33
 
@@ -69,9 +73,9 @@ void calibrate() {
 	Serial.printf("Y-min: %d | Y-max: %d", y_min, y_max);
 	Serial.println();
 
-	// calculating midpoints (dropped this method and instead we are using the real mean values the joystick sits at, but requires an extra step of calibration as seen below)
-	// float x_mid = (x_max + x_min) / 2.0f;
-	// float y_mid = (y_max + y_min) / 2.0f;
+	// calculating midpoints (dropped this method and instead we are using the real mean values the joystick sits at,
+	// but requires an extra step of calibration as seen below) float x_mid = (x_max + x_min) / 2.0f; float y_mid =
+	// (y_max + y_min) / 2.0f;
 
 	// the range of values taken by one side (positive or negative) of the axis
 	float x_avg_delta = (x_max - x_min) / 2.0f;
@@ -115,7 +119,7 @@ void calibrate() {
 		delay(10);
 	}
 
-    constexpr float SIGMA_MULTIPLIER = 3.0f;
+	constexpr float SIGMA_MULTIPLIER = 3.0f;
 
 	float x_variance = (count > 1) ? x_M2 / (count - 1) : 0.0f;
 	float y_variance = (count > 1) ? y_M2 / (count - 1) : 0.0f;
@@ -196,7 +200,7 @@ void loop() {
 	int16_t y = analogRead(Y_AXIS_PIN);
 
 	applyOffsets(&x, &y);
-	applyDeadzone(&x, &y);
+	//applyDeadzone(&x, &y);
 
 	insert_at(x_readings, SAMPLE_SIZE, 0, x);
 	insert_at(y_readings, SAMPLE_SIZE, 0, y);
@@ -211,9 +215,11 @@ void loop() {
 	float y_deviation = sqrtf(y_variance);
 
 	Serial.printf("X:%d\nY:%d\n", x, y);
-	Serial.printf("Average_X:%.2f\nAverage_Y:%.2f\n", x_mean, y_mean);
-	Serial.printf("Variance_X:%.2f\nVariance_Y:%.2f\n", x_variance, y_variance);
-	Serial.printf("Deviation_X:%.2f\nDeviation_Y:%.2f\n", x_deviation, y_deviation);
+    Serial.println("Deadzone_X:%d\nDeadzone_Y:%d\n", deadzones[0], deadzones[1]);
+    
+	//Serial.printf("Average_X:%.2f\nAverage_Y:%.2f\n", x_mean, y_mean);
+	//Serial.printf("Variance_X:%.2f\nVariance_Y:%.2f\n", x_variance, y_variance);
+	//Serial.printf("Deviation_X:%.2f\nDeviation_Y:%.2f\n", x_deviation, y_deviation);
 
 	delay(100);
 }

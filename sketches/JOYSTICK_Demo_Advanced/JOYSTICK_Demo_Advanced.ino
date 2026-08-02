@@ -200,7 +200,7 @@ void loop() {
 	int16_t y = analogRead(Y_AXIS_PIN);
 
 	applyOffsets(&x, &y);
-	//applyDeadzone(&x, &y);
+	applyDeadzone(&x, &y);
 
 	insert_at(x_readings, SAMPLE_SIZE, 0, x);
 	insert_at(y_readings, SAMPLE_SIZE, 0, y);
@@ -215,11 +215,9 @@ void loop() {
 	float y_deviation = sqrtf(y_variance);
 
 	Serial.printf("X:%d\nY:%d\n", x, y);
-    Serial.printf("Deadzone_X:%d\nDeadzone_Y:%d\n", deadzones[0], deadzones[1]);
-
-	//Serial.printf("Average_X:%.2f\nAverage_Y:%.2f\n", x_mean, y_mean);
-	//Serial.printf("Variance_X:%.2f\nVariance_Y:%.2f\n", x_variance, y_variance);
-	//Serial.printf("Deviation_X:%.2f\nDeviation_Y:%.2f\n", x_deviation, y_deviation);
+	Serial.printf("Average_X:%.2f\nAverage_Y:%.2f\n", x_mean, y_mean);
+	Serial.printf("Variance_X:%.2f\nVariance_Y:%.2f\n", x_variance, y_variance);
+	Serial.printf("Deviation_X:%.2f\nDeviation_Y:%.2f\n", x_deviation, y_deviation);
 
 	delay(100);
 }

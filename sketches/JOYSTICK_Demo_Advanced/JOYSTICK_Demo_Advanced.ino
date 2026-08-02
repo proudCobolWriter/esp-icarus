@@ -8,8 +8,8 @@
 #define ADC_RESOLUTION 12 // Sets the ESP32 ADC resolution to 12-bit so (0-4095) range
 
 constexpr int16_t MID_POINT = static_cast<int16_t>(powf(2.0f, (float)ADC_RESOLUTION) / 2);
-
 constexpr uint8_t SAMPLE_SIZE = 10;
+
 typedef int16_t r_arr[SAMPLE_SIZE];
 
 r_arr x_readings = {0};
@@ -98,6 +98,11 @@ void calibrate() {
 	uint16_t x_deadzone = 0, y_deadzone = 0;
 	start_timestamp = millis();
 
+	uint16_t count = 0;
+
+	float x_mean = 0.0f, x_M2 = 0.0f;
+	float y_mean = 0.0f, y_M2 = 0.0f;
+
 	while (millis() - start_timestamp < 5000) {
 		int16_t x = analogRead(X_AXIS_PIN);
 		int16_t y = analogRead(Y_AXIS_PIN);
@@ -109,11 +114,30 @@ void calibrate() {
 		if (abs(y) > y_deadzone)
 			y_deadzone = abs(y);
 
+		count++;
+
+		float x_delta = x - x_mean;
+		x_mean += x_delta / count;
+		x_M2 += x_delta * (x - x_mean);
+
+		float y_delta = y - y_mean;
+		y_mean += y_delta / count;
+		y_M2 += y_delta * (y - y_mean);
+
 		delay(10);
 	}
 
-	deadzones[0] = x_deadzone + 8;
-	deadzones[1] = y_deadzone + 8;
+	float x_variance = (count > 1) ? x_M2 / (count - 1) : 0.0f;
+	float y_variance = (count > 1) ? y_M2 / (count - 1) : 0.0f;
+
+	float x_deviation = sqrtf(x_variance);
+	float y_deviation = sqrtf(y_variance);
+
+	calibration_offsets[0] += x_mean / 2.0f;
+	calibration_offsets[1] += y_mean / 2.0f;
+
+	deadzones[0] = x_deadzone + (uint16_t)x_deviation;
+	deadzones[1] = y_deadzone + (uint16_t)y_deviation;
 
 	Serial.println(F("Calibration run complete!"));
 	Serial.println(F("---------------------------------------------------"));

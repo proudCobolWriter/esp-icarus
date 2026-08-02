@@ -196,7 +196,7 @@ void loop() {
 	Serial.printf("X:%d\nY:%d\n", x, y);
 	Serial.printf("Average_X:%.2f\nAverage_Y:%.2f\n", x_mean, y_mean);
 	Serial.printf("Variance_X:%.2f\nVariance_Y:%.2f\n", x_variance, y_variance);
-	Serial.printf("Deviation_X:%.2f\nDeviation_X:%.2f\n", x_deviation, y_deviation);
+	Serial.printf("Deviation_X:%.2f\nDeviation_Y:%.2f\n", x_deviation, y_deviation);
 
 	delay(100);
 }

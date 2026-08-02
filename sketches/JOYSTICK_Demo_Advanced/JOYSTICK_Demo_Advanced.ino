@@ -1,7 +1,6 @@
 // The following code could be used to improve the ADC accuracy, but in that case
 // the arbitrary unit analogRead returns should be dropped and mV/V used
 // https://github.com/G6EJD/ESP32-ADC-Accuracy-Improvement-function/blob/master/ESP32_ADC_Read_Voltage_Accurate.ino
-#include <cmath>
 
 #define X_AXIS_PIN 32
 #define Y_AXIS_PIN 33
@@ -35,46 +34,34 @@ void setup() {
 	analogReadResolution(ADC_RESOLUTION);
 
 	Serial.println(F("Get ready for the calibration in 2 seconds..."));
-
 	delay(2000);
 
 	calibrate();
-
 	delay(5000);
 }
 
 void calibrate() {
 	Serial.println(F("Starting calibration. Actuate the joystick in all directions for 5 seconds"));
 
-	int16_t x_min, x_max, y_min, y_max;
-	x_min = x_max = y_min = y_max = MID_POINT;
+	int16_t x_min = MID_POINT, x_max = MID_POINT;
+	int16_t y_min = MID_POINT, y_max = MID_POINT;
 
 	uint32_t start_timestamp = millis();
-	uint16_t time_elapsed = 0;
 
-	while (time_elapsed < 5000) {
+	while (millis() - start_timestamp < 5000) {
 		int16_t x = analogRead(X_AXIS_PIN);
 		int16_t y = analogRead(Y_AXIS_PIN);
 
-		if (x < x_min) {
+		if (x < x_min)
 			x_min = x;
-		}
-
-		if (x > x_max) {
+		if (x > x_max)
 			x_max = x;
-		}
-
-		if (y < y_min) {
+		if (y < y_min)
 			y_min = y;
-		}
-
-		if (y > y_max) {
+		if (y > y_max)
 			y_max = y;
-		}
 
 		delay(10);
-
-		time_elapsed = millis() - start_timestamp;
 	}
 
 	Serial.printf("Found the following extremums: X-min: %d | X-max: %d\n", x_min, x_max);
@@ -82,72 +69,59 @@ void calibrate() {
 	Serial.printf("Y-min: %d | Y-max: %d", y_min, y_max);
 	Serial.println();
 
+	// midpoints
+	float x_mid = (x_max + x_min) / 2.0f;
+	float y_mid = (y_max + y_min) / 2.0f;
+
 	// the range of values taken by one side (positive or negative) of the axis
 	float x_avg_delta = (x_max - x_min) / 2.0f;
 	float y_avg_delta = (y_max - y_min) / 2.0f;
 
 	// prevents zero division
-	if (x_avg_delta == 0.0f) {
+	if (x_avg_delta == 0.0f)
 		x_avg_delta = MID_POINT;
-	}
-
-	if (y_avg_delta == 0.0f) {
+	if (y_avg_delta == 0.0f)
 		y_avg_delta = MID_POINT;
-	}
-
-	float x_mid = (x_max + x_min) / 2.0f;
-	float y_mid = (y_max + y_min) / 2.0f;
-
-	calibration_offsets[0] = x_mid;
-	calibration_offsets[1] = y_mid;
 
 	float x_scale = MID_POINT / x_avg_delta;
 	float y_scale = MID_POINT / y_avg_delta;
 
+	calibration_offsets[0] = x_mid;
+	calibration_offsets[1] = y_mid;
+
 	calibration_scales[0] = x_scale;
 	calibration_scales[1] = y_scale;
 
-    delay(1000);
-
 	Serial.println(F("Next calibration step. Hold the stick still for 5 seconds, checking noise data"));
+	delay(1000);
 
-	uint16_t x_deadzone, y_deadzone;
-	x_deadzone = y_deadzone = 0;
-
+	uint16_t x_deadzone = 0, y_deadzone = 0;
 	start_timestamp = millis();
-	time_elapsed = 0;
 
-	while (time_elapsed < 5000) {
+	while (millis() - start_timestamp < 5000) {
 		int16_t x = analogRead(X_AXIS_PIN);
 		int16_t y = analogRead(Y_AXIS_PIN);
 
-        applyOffsets(&x, &y);
+		applyOffsets(&x, &y);
 
-		if (abs(x) > x_deadzone) {
+		if (abs(x) > x_deadzone)
 			x_deadzone = abs(x);
-		}
-
-		if (abs(y) > y_deadzone) {
+		if (abs(y) > y_deadzone)
 			y_deadzone = abs(y);
-		}
 
 		delay(10);
-
-		time_elapsed = millis() - start_timestamp;
 	}
 
-    deadzones[0] = x_deadzone;
-    deadzones[1] = y_deadzone;
+	deadzones[0] = x_deadzone + 8;
+	deadzones[1] = y_deadzone + 8;
 
 	Serial.println(F("Calibration run complete!"));
 	Serial.println(F("---------------------------------------------------"));
 	Serial.printf("Middle at X: %.0f | Y: %.0f\n", x_mid, y_mid);
 	Serial.printf("Value ranges: X: %.0f wide | Y: %.0f wide\n", x_avg_delta * 2, y_avg_delta * 2);
 	Serial.printf("Scale factors: X: %.2f | Y: %.2f\n", x_scale, y_scale);
-    Serial.printf("Deadzone: X: %d | Y: %d\n", x_deadzone, y_deadzone);
+	Serial.printf("Deadzone: X: %d | Y: %d\n", x_deadzone, y_deadzone);
 }
-
-template <typename T> T clamp(const T v, const T min, const T max) { return (v <= min) ? min : ((v >= max) ? max : v); }
 
 void insert_at(r_arr arr, uint8_t n, uint8_t pos, int16_t val) {
 	if (n == 0 || pos >= n)
@@ -186,18 +160,18 @@ float get_variance(const r_arr arr, uint8_t n, float mean) {
 }
 
 void applyOffsets(int16_t *x, int16_t *y) {
-	(*x) = clamp<int16_t>(((*x) - calibration_offsets[0]) * calibration_scales[0], -MID_POINT, MID_POINT);
-	(*y) = clamp<int16_t>(((*y) - calibration_offsets[1]) * calibration_scales[1], -MID_POINT, MID_POINT);
+	float x_scaled = roundf((*x - calibration_offsets[0]) * calibration_scales[0]);
+	float y_scaled = roundf((*y - calibration_offsets[1]) * calibration_scales[1]);
+
+	*x = std::clamp<int16_t>(x_scaled, -MID_POINT, MID_POINT);
+	*y = std::clamp<int16_t>(y_scaled, -MID_POINT, MID_POINT);
 }
 
 void applyDeadzone(int16_t *x, int16_t *y) {
-    if (abs(*x) <= deadzones[0]) {
-        (*x) = 0;
-    }
-
-    if (abs(*y) <= deadzones[1]) {
-        (*y) = 0;
-    }
+	if (abs(*x) <= deadzones[0])
+		*x = 0;
+	if (abs(*y) <= deadzones[1])
+		*y = 0;
 }
 
 void loop() {
@@ -205,7 +179,7 @@ void loop() {
 	int16_t y = analogRead(Y_AXIS_PIN);
 
 	applyOffsets(&x, &y);
-    applyDeadzone(&x, &y);
+	applyDeadzone(&x, &y);
 
 	insert_at(x_readings, SAMPLE_SIZE, 0, x);
 	insert_at(y_readings, SAMPLE_SIZE, 0, y);
@@ -216,9 +190,13 @@ void loop() {
 	float x_variance = get_variance(x_readings, SAMPLE_SIZE, x_mean);
 	float y_variance = get_variance(y_readings, SAMPLE_SIZE, y_mean);
 
+	float x_deviation = sqrtf(x_variance);
+	float y_deviation = sqrtf(y_variance);
+
 	Serial.printf("X:%d\nY:%d\n", x, y);
 	Serial.printf("Average_X:%.2f\nAverage_Y:%.2f\n", x_mean, y_mean);
 	Serial.printf("Variance_X:%.2f\nVariance_Y:%.2f\n", x_variance, y_variance);
+	Serial.printf("Deviation_X:%.2f\nDeviation_X:%.2f\n", x_deviation, y_deviation);
 
 	delay(100);
 }

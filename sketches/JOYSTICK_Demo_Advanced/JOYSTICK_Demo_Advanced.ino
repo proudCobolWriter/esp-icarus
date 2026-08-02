@@ -69,9 +69,9 @@ void calibrate() {
 	Serial.printf("Y-min: %d | Y-max: %d", y_min, y_max);
 	Serial.println();
 
-	// midpoints
-	float x_mid = (x_max + x_min) / 2.0f;
-	float y_mid = (y_max + y_min) / 2.0f;
+	// calculating midpoints (dropped this method and instead we are using the real mean values the joystick sits at, but requires an extra step of calibration as seen below)
+	// float x_mid = (x_max + x_min) / 2.0f;
+	// float y_mid = (y_max + y_min) / 2.0f;
 
 	// the range of values taken by one side (positive or negative) of the axis
 	float x_avg_delta = (x_max - x_min) / 2.0f;
@@ -86,16 +86,9 @@ void calibrate() {
 	float x_scale = MID_POINT / x_avg_delta;
 	float y_scale = MID_POINT / y_avg_delta;
 
-	calibration_offsets[0] = x_mid;
-	calibration_offsets[1] = y_mid;
-
-	calibration_scales[0] = x_scale;
-	calibration_scales[1] = y_scale;
-
 	Serial.println(F("Next calibration step. Hold the stick still for 5 seconds, checking noise data"));
 	delay(1000);
 
-	uint16_t x_deadzone = 0, y_deadzone = 0;
 	start_timestamp = millis();
 
 	uint16_t count = 0;
@@ -107,19 +100,14 @@ void calibrate() {
 		int16_t x = analogRead(X_AXIS_PIN);
 		int16_t y = analogRead(Y_AXIS_PIN);
 
-		applyOffsets(&x, &y);
-
-		if (abs(x) > x_deadzone)
-			x_deadzone = abs(x);
-		if (abs(y) > y_deadzone)
-			y_deadzone = abs(y);
-
 		count++;
 
+		// Welford update for X
 		float x_delta = x - x_mean;
 		x_mean += x_delta / count;
 		x_M2 += x_delta * (x - x_mean);
 
+		// Welford update for Y
 		float y_delta = y - y_mean;
 		y_mean += y_delta / count;
 		y_M2 += y_delta * (y - y_mean);
@@ -127,24 +115,29 @@ void calibrate() {
 		delay(10);
 	}
 
+    constexpr float SIGMA_MULTIPLIER = 3.0f;
+
 	float x_variance = (count > 1) ? x_M2 / (count - 1) : 0.0f;
 	float y_variance = (count > 1) ? y_M2 / (count - 1) : 0.0f;
 
 	float x_deviation = sqrtf(x_variance);
 	float y_deviation = sqrtf(y_variance);
 
-	calibration_offsets[0] += x_mean / 2.0f;
-	calibration_offsets[1] += y_mean / 2.0f;
+	calibration_offsets[0] = x_mean;
+	calibration_offsets[1] = y_mean;
 
-	deadzones[0] = x_deadzone + (uint16_t)x_deviation;
-	deadzones[1] = y_deadzone + (uint16_t)y_deviation;
+	calibration_scales[0] = x_scale;
+	calibration_scales[1] = y_scale;
+
+	deadzones[0] = static_cast<uint16_t>(roundf(x_deviation * calibration_scales[0] * SIGMA_MULTIPLIER));
+	deadzones[1] = static_cast<uint16_t>(roundf(y_deviation * calibration_scales[1] * SIGMA_MULTIPLIER));
 
 	Serial.println(F("Calibration run complete!"));
 	Serial.println(F("---------------------------------------------------"));
-	Serial.printf("Middle at X: %.0f | Y: %.0f\n", x_mid, y_mid);
+	Serial.printf("Middle at X: %.0f | Y: %.0f\n", calibration_offsets[0], calibration_offsets[1]);
 	Serial.printf("Value ranges: X: %.0f wide | Y: %.0f wide\n", x_avg_delta * 2, y_avg_delta * 2);
-	Serial.printf("Scale factors: X: %.2f | Y: %.2f\n", x_scale, y_scale);
-	Serial.printf("Deadzone: X: %d | Y: %d\n", x_deadzone, y_deadzone);
+	Serial.printf("Scale factors: X: %.2f | Y: %.2f\n", calibration_scales[0], calibration_scales[1]);
+	Serial.printf("Deadzone: X: %d | Y: %d\n", deadzones[0], deadzones[1]);
 }
 
 void insert_at(r_arr arr, uint8_t n, uint8_t pos, int16_t val) {

@@ -16,6 +16,8 @@ typedef int16_t r_arr[SAMPLE_SIZE];
 r_arr x_readings = {0};
 r_arr y_readings = {0};
 
+uint16_t deadzones[2] = {0, 0};
+
 float calibration_offsets[2] = {0.0f, 0.0f};
 float calibration_scales[2] = {1.0f, 1.0f};
 
@@ -105,17 +107,47 @@ void calibrate() {
 	calibration_scales[0] = x_scale;
 	calibration_scales[1] = y_scale;
 
+    delay(1000);
+
+	Serial.println(F("Next calibration step. Hold the stick still for 5 seconds, checking noise data"));
+
+	uint16_t x_deadzone, y_deadzone;
+	x_deadzone = y_deadzone = 0;
+
+	start_timestamp = millis();
+	time_elapsed = 0;
+
+	while (time_elapsed < 5000) {
+		int16_t x = analogRead(X_AXIS_PIN);
+		int16_t y = analogRead(Y_AXIS_PIN);
+
+        applyOffsets(&x, &y);
+
+		if (abs(x) > x_deadzone) {
+			x_deadzone = abs(x);
+		}
+
+		if (abs(y) > y_deadzone) {
+			y_deadzone = abs(y);
+		}
+
+		delay(10);
+
+		time_elapsed = millis() - start_timestamp;
+	}
+
+    deadzones[0] = x_deadzone;
+    deadzones[1] = y_deadzone;
+
 	Serial.println(F("Calibration run complete!"));
 	Serial.println(F("---------------------------------------------------"));
 	Serial.printf("Middle at X: %.0f | Y: %.0f\n", x_mid, y_mid);
 	Serial.printf("Value ranges: X: %.0f wide | Y: %.0f wide\n", x_avg_delta * 2, y_avg_delta * 2);
 	Serial.printf("Scale factors: X: %.2f | Y: %.2f\n", x_scale, y_scale);
+    Serial.printf("Deadzone: X: %d | Y: %d\n", x_deadzone, y_deadzone);
 }
 
-template<typename T>
-T clamp(const T v, const T min, const T max) {
-	return (v <= min) ? min : ((v >= max) ? max : v);
-}
+template <typename T> T clamp(const T v, const T min, const T max) { return (v <= min) ? min : ((v >= max) ? max : v); }
 
 void insert_at(r_arr arr, uint8_t n, uint8_t pos, int16_t val) {
 	if (n == 0 || pos >= n)
@@ -158,11 +190,22 @@ void applyOffsets(int16_t *x, int16_t *y) {
 	(*y) = clamp<int16_t>(((*y) - calibration_offsets[1]) * calibration_scales[1], -MID_POINT, MID_POINT);
 }
 
+void applyDeadzone(int16_t *x, int16_t *y) {
+    if (abs(*x) <= deadzones[0]) {
+        (*x) = 0;
+    }
+
+    if (abs(*y) <= deadzones[1]) {
+        (*y) = 0;
+    }
+}
+
 void loop() {
 	int16_t x = analogRead(X_AXIS_PIN);
 	int16_t y = analogRead(Y_AXIS_PIN);
 
 	applyOffsets(&x, &y);
+    applyDeadzone(&x, &y);
 
 	insert_at(x_readings, SAMPLE_SIZE, 0, x);
 	insert_at(y_readings, SAMPLE_SIZE, 0, y);

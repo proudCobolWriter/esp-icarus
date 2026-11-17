@@ -9,13 +9,12 @@ extern "C" {
 #endif
 
 typedef struct {
-	void *pxTCB;               // Pointer to Task Control Block (matches xHandle)
+	void *pxTCB;			   // Pointer to Task Control Block (matches xHandle)
 	StackType_t *pxTopOfStack; // Stack latest (top) pointer when task suspended
 	StackType_t *pxEndOfStack; // Highest memory boundary of the stack allocation (basically the maximum stack pointer used since runtime)
 } TaskSnapshot_t;
 
-UBaseType_t uxTaskGetSnapshotAll(TaskSnapshot_t *const pxTaskSnapshotArray, const UBaseType_t uxArrayLength,
-                                 UBaseType_t *const pxTCBSize);
+UBaseType_t uxTaskGetSnapshotAll(TaskSnapshot_t *const pxTaskSnapshotArray, const UBaseType_t uxArrayLength, UBaseType_t *const pxTCBSize);
 
 #ifdef __cplusplus
 }

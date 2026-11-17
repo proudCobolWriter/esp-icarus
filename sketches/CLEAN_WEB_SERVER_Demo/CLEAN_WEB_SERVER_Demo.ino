@@ -28,7 +28,7 @@ const char *notFoundPath = "/serve/views/404.html";
 const char *ntpServer = "pool.ntp.org";
 
 const unsigned short WEB_SERVER_PORT = 80U; // default HTTP protocol port
-const bool IGNORE_WIFI_EVENTS = true;       // disable for debugging
+const bool IGNORE_WIFI_EVENTS = true;		// disable for debugging
 
 const uint8_t MAX_RETRIES = 5; // max WiFi router initial login attempts
 
@@ -38,11 +38,11 @@ const unsigned short STATUS_DELAY = 1;
 
 const int RX_PIN = 16, TX_PIN = 17;
 const uint8_t SERIAL_PORT = 2; // 0 is used for code uploading and serial monitor, 1 is used on custom
-                               // pins only, 2 is more versatile
+							   // pins only, 2 is more versatile
 const uint32_t GPS_BAUD = 9600;
 
 const bool SYSTEM_MONITORING_DEBUG = false; // decides whether or not we print every STATUS_DELAY second a detailed
-                                            // overview of all the running tasks on the system
+											// overview of all the running tasks on the system
 
 // INSTANTIATING
 
@@ -51,10 +51,10 @@ AsyncWebSocket ws("/ws");
 
 HardwareSerial gpsSerial(SERIAL_PORT);
 
-JsonDocument liveStream;    // up-to-date sensor information retrieved every
-                            // GPS_LOG_DELAY interval
+JsonDocument liveStream;	// up-to-date sensor information retrieved every
+							// GPS_LOG_DELAY interval
 JsonDocument historyStream; // old sensors information retrieved only once upon
-                            // socket handshake
+							// socket handshake
 
 TinyGPSPlus gps;
 QMC5883LCompass compass;
@@ -242,12 +242,10 @@ void handleWebSocketMessage(AsyncWebSocketClient *client, AwsFrameInfo *info, ui
 	}
 }
 
-void onEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data,
-             size_t len) {
+void onEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len) {
 	switch (type) {
 	case WS_EVT_CONNECT:
-		Serial.printf("[+] WebSocket client #%u connected from %s\n", client->id(),
-		              client->remoteIP().toString().c_str());
+		Serial.printf("[+] WebSocket client #%u connected from %s\n", client->id(), client->remoteIP().toString().c_str());
 		break;
 	case WS_EVT_DISCONNECT:
 		Serial.printf("[-] WebSocket client #%u disconnected\n", client->id());
@@ -293,8 +291,7 @@ void onEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType 
 			break;
 		}
 
-		Serial.printf("[-] WebSocket client #%u experienced an error of code %u: %s\n", client->id(), error_code,
-		              reason);
+		Serial.printf("[-] WebSocket client #%u experienced an error of code %u: %s\n", client->id(), error_code, reason);
 		break;
 	};
 	default:
@@ -384,18 +381,18 @@ void scanWiFi() {
 		Serial.print(n);
 		Serial.println(F(" networks found"));
 		Serial.println(F("Nr | SSID                             | RSSI | CH "
-		                 "| Encryption"));
+						 "| Encryption"));
 
 		for (int i = 0; i < n; ++i) {
 			// Print SSID and RSSI for each network found
 			Serial.printf("%2d", i + 1);
 			Serial.print(" | ");
 			Serial.printf("%-32.32s",
-			              WiFi.SSID(i).c_str()); // %s means string formatting. - means left
-			                                     // padding. -32 enforces atleast 32
-			                                     // characters, if there are some missing it
-			                                     // fills the gaps out with spaces. .32 means
-			                                     // it will truncate the text past 32 chars.
+						  WiFi.SSID(i).c_str()); // %s means string formatting. - means left
+												 // padding. -32 enforces atleast 32
+												 // characters, if there are some missing it
+												 // fills the gaps out with spaces. .32 means
+												 // it will truncate the text past 32 chars.
 			Serial.print(" | ");
 			Serial.printf("%4" PRIi32, WiFi.RSSI(i));
 			Serial.print(" | ");
@@ -576,7 +573,7 @@ void initGPS() {
 }
 
 void initCompass() {
-	compass.init();                          // handles 0x0B and 0x09 registers internally
+	compass.init();							 // handles 0x0B and 0x09 registers internally
 	compass.setMode(0x01, 0x00, 0x10, 0x00); // check the library documentation or the chip's manual for information
 	// compass.setCalibration(-1442, -27, -1567, -243, -1000, 1000);
 
@@ -710,8 +707,7 @@ void setup() {
 	xTaskCreatePinnedToCore(GPSProcessTask, "GPSProcessTask", 8192, NULL, 1, &GPSProcessTaskHandle, 1);
 	xTaskCreatePinnedToCore(CompassProcessTask, "CompassProcessTask", 8192, NULL, 1, &CompassProcessTaskHandle, 1);
 	xTaskCreatePinnedToCore(BroadcastStatusTask, "BroadcastStatusTask", 8192, NULL, 1, &BroadcastStatusTaskHandle, 1);
-	xTaskCreatePinnedToCore(WebSocketCleanupTask, "WebSocketCleanupTask", 8192, NULL, 1, &WebSocketCleanupTaskHandle,
-	                        1);
+	xTaskCreatePinnedToCore(WebSocketCleanupTask, "WebSocketCleanupTask", 8192, NULL, 1, &WebSocketCleanupTaskHandle, 1);
 	xTaskCreatePinnedToCore(SysMonTask, "SysMonTask", 4096, NULL, 1, &SysMonTaskHandle, 0);
 
 	vTaskDelete(NULL);
@@ -749,7 +745,7 @@ void CompassProcessTask(void *pvParameters) {
 		compass.read();
 		Serial.println(compass.getAzimuth());
 
-        vTaskDelay(pdMS_TO_TICKS(250));
+		vTaskDelay(pdMS_TO_TICKS(250));
 	}
 }
 
@@ -797,12 +793,9 @@ void SysMonTask(void *pvParameters) {
 			uxTaskGetSnapshotAll(pxTaskSnapshotArray, uxArraySize, &tcbSize);
 
 			if (SYSTEM_MONITORING_DEBUG) {
-				Serial.println(F(
-				    "------------------------------ FREE RTOS TASK MONITOR SNAPSHOT -------------------------------"));
-				Serial.printf("%-20s | %-4s | %-9s | %-8s | %-12s | %-12s | %-12s\n", "Task Name", "Core", "CPU Usage",
-				              "Priority", "Alloc Stack", "Free Stack", "Stack Usage");
-				Serial.println(F(
-				    "----------------------------------------------------------------------------------------------"));
+				Serial.println(F("------------------------------ FREE RTOS TASK MONITOR SNAPSHOT -------------------------------"));
+				Serial.printf("%-20s | %-4s | %-9s | %-8s | %-12s | %-12s | %-12s\n", "Task Name", "Core", "CPU Usage", "Priority", "Alloc Stack", "Free Stack", "Stack Usage");
+				Serial.println(F("----------------------------------------------------------------------------------------------"));
 			}
 
 			float totalCpuPercent = 0.0f;
@@ -813,8 +806,7 @@ void SysMonTask(void *pvParameters) {
 
 				for (UBaseType_t j = 0; j < uxArraySize; j++) {
 					if (pxTaskSnapshotArray[j].pxTCB == status.xHandle) {
-						totalStackBytes =
-						    (uintptr_t)pxTaskSnapshotArray[j].pxEndOfStack - (uintptr_t)status.pxStackBase;
+						totalStackBytes = (uintptr_t)pxTaskSnapshotArray[j].pxEndOfStack - (uintptr_t)status.pxStackBase;
 						break;
 					}
 				}
@@ -822,8 +814,7 @@ void SysMonTask(void *pvParameters) {
 				const UBaseType_t freeStack = status.usStackHighWaterMark;
 				const UBaseType_t allocatedStack = totalStackBytes;
 				const UBaseType_t usedBytesStack = (allocatedStack > freeStack) ? (allocatedStack - freeStack) : 0;
-				const float usedPercent =
-				    (allocatedStack > 0) ? ((float)usedBytesStack / allocatedStack) * 100.0f : 0.0f;
+				const float usedPercent = (allocatedStack > 0) ? ((float)usedBytesStack / allocatedStack) * 100.0f : 0.0f;
 
 				constexpr UBaseType_t invalidCoreInt = 2147483647;
 				int8_t core = (status.xCoreID == invalidCoreInt) ? -1 : status.xCoreID;
@@ -848,18 +839,16 @@ void SysMonTask(void *pvParameters) {
 				float cpuPercent = 0.0f;
 				if (totalSystemDelta > 0 && status.ulRunTimeCounter >= prevRunTime) {
 					const uint32_t taskDelta = status.ulRunTimeCounter - prevRunTime;
-					cpuPercent = (((float)taskDelta / (float)totalSystemDelta * 100.0f) /
-					              portNUM_PROCESSORS); // portNUM_PROCESSORS should be equal to 2 with the Xtensa ESP32
-					                                   // CPU. It normalizes the total system load.
+					cpuPercent = (((float)taskDelta / (float)totalSystemDelta * 100.0f) / portNUM_PROCESSORS);
+					// portNUM_PROCESSORS should be equal to 2 with the Xtensa ESP3248 CPU. It normalizes the total system load.
 				}
 
 				if (!strPrefix("IDLE", status.pcTaskName)) {
 					totalCpuPercent += cpuPercent;
 
 					if (SYSTEM_MONITORING_DEBUG) {
-						Serial.printf("%-20s | %-4d | %8.1f%% | %-8u | %-10u B | %-10u B | %10.1f%%\n",
-						              status.pcTaskName, core, cpuPercent, status.uxCurrentPriority, allocatedStack,
-						              usedBytesStack, usedPercent);
+						Serial.printf("%-20s | %-4d | %8.1f%% | %-8u | %-10u B | %-10u B | %10.1f%%\n", status.pcTaskName, core, cpuPercent, status.uxCurrentPriority,
+									  allocatedStack, usedBytesStack, usedPercent);
 					}
 				}
 			}

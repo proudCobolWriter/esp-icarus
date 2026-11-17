@@ -1,14 +1,23 @@
-// Cesium.Ion.defaultAccessToken = "";
+Cesium.Ion.defaultAccessToken =
+	"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI1MDIxZmJkYy00NzMxLTQyODctYmNjMS0zMTAyZjcxN2YxMGIiLCJpZCI6NDI2Njg1LCJpc3MiOiJodHRwczovL2lvbi5jZXNpdW0uY29tIiwiYXVkIjoidW5kZWZpbmVkX2RlZmF1bHQiLCJpYXQiOjE3Nzc4MDQ0ODN9.kdrrteryMK5Yk9vudKKnfvLOOmkwvwHsSvSJ5CT_P-Q";
+
+// 	const mapStyles = {
+// 		normal: Cesium.IonWorldImageryStyle.AERIAL,
+// 		labels: Cesium.IonWorldImageryStyle.AERIAL_WITH_LABELS,
+// 		roads: Cesium.IonWorldImageryStyle.ROAD,
+// 	};
+
+const imageryViewModels = Cesium.createDefaultImageryProviderViewModels();
 
 const viewer = new Cesium.Viewer("cesium-container", {
-	// baseLayer: Cesium.ImageryLayer.fromWorldImagery({
-	//     style: Cesium.IonWorldImageryStyle.AERIAL_WITH_LABELS,
-	// }),
+	// 	baseLayer: Cesium.ImageryLayer.fromWorldImagery({
+	// 		style: mapStyles.normal,
+	// 	}),
 	baseLayerPicker: true,
-	selectedImageryProviderViewModel:
-		Cesium.createDefaultImageryProviderViewModels().find(
-			(m) => m.name === "Bing Maps Aerial with Labels",
-		),
+	imageryProviderViewModels: imageryViewModels,
+	selectedImageryProviderViewModel: imageryViewModels.find(
+		(m) => m.name === "Sentinel-2",
+	), // or "Bing Maps Aerial with Labels"
 	terrain: Cesium.Terrain.fromWorldTerrain(),
 	sceneModePicker: false,
 	timeline: false,
@@ -219,7 +228,7 @@ async function loadModel(asset) {
 	return entity;
 }
 
-loadModel("/models/satellite.glb")
+loadModel(/* "/models/satellite.glb" */ 4703030)
 	.then((entity) => {
 		console.log("Model asset ready in memory: ", entity);
 	})

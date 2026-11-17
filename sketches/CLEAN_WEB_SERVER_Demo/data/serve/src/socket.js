@@ -51,7 +51,7 @@ class Socket {
 		}
 
 		console.log(
-			`Connection closed, retrying connection in ${Socket.RETRY_RECONNECT_INTERVAL}...`,
+			`Connection closed, retrying connection in ${Socket.RETRY_RECONNECT_INTERVAL} seconds...`,
 		);
 		setTimeout(
 			() => this.initWebSocket(),
@@ -77,7 +77,7 @@ class Socket {
 					this.send("PONG");
 					break;
 				case "PONG":
-					console.log("Heartbeat verified.");
+					console.log("Heartbeat confirmed.");
 					return;
 				case "LOG":
 					break;
@@ -104,7 +104,7 @@ class Socket {
 			this.send("PING");
 			this.attempts += 1;
 
-			if (this.attempts <= Socket.MAX_PINGS) return;
+			if (this.attempts < Socket.MAX_PINGS) return;
 
 			console.warn(
 				"Max pings exceeded without response. Terminating connection.",

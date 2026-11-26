@@ -1,20 +1,26 @@
 const dc = document.getElementsByClassName("dashboard-container").item(0);
 const at = document.getElementById("alt-text");
 
-window.addEventListener("hashchange", handleClientsideRouting);
+window.addEventListener("hashchange", handleClientSideRouting);
 window.addEventListener("DOMContentLoaded", () =>
-	handleClientsideRouting(true),
+	handleClientSideRouting(true),
 );
 
 const earthImport = import("/src/earth.js");
 const socketImport = import("/src/socket.js");
+const logManagerImport = import("/src/logmanager.js");
 
-const [Viewer, Socket] = await Promise.all([earthImport, socketImport]);
+const [Viewer, Socket, LogManager] = await Promise.all([
+	earthImport,
+	socketImport,
+	logManagerImport,
+]);
 
 at.classList.add("hidden");
 if (document.location.hash === "") dc.classList.remove("hidden");
 
 const ws = new Socket();
+const lm = new LogManager();
 
 String.prototype.capitalize = function () {
 	if (!this) return "";
@@ -38,11 +44,11 @@ function generateFlightPath(flightData) {
 
 		Viewer.entities.add({
 			description: `
-                <p>
-                    <b>Location:</b> latitude ${dataPoint.longitude}, longitude ${dataPoint.latitude}, altitude ${dataPoint.height}m<br>
-                    <b>Epoch (UNIX time):</b> ${Math.floor(dateOfOverflight.getTime() / 1000)}<br>
-                    <b>Date:</b> ${dateOfOverflight.toLocaleDateString(undefined, options).capitalize()}
-                </p>`,
+				<p>
+					<b>Location:</b> latitude ${dataPoint.longitude}, longitude ${dataPoint.latitude}, altitude ${dataPoint.height}m<br>
+					<b>Epoch (UNIX time):</b> ${Math.floor(dateOfOverflight.getTime() / 1000)}<br>
+					<b>Date:</b> ${dateOfOverflight.toLocaleDateString(undefined, options).capitalize()}
+				</p>`,
 			// position: Cesium.Cartesian3.fromDegrees(
 			//	dataPoint.longitude,
 			//	dataPoint.latitude,
@@ -67,6 +73,7 @@ ws.callback = (type, obj) => {
 		case "SENSORS-HISTORY":
 			if (initialGPSdataLoaded) return;
 			initialGPSdataLoaded = true;
+
 			let flightData = [];
 
 			console.log("Adding the initial chunk of geopoints");
@@ -96,11 +103,18 @@ ws.callback = (type, obj) => {
 			]);
 
 			break;
+		case "LOG":
+			lm.log(obj);
+		case "LOGS-HISTORY":
+			lm.log(obj);
+		case "STATUS":
+
 		default:
+			console.warn(`Unknown payload type received "${type}"!`);
 	}
 };
 
-function handleClientsideRouting(firstConnection = false) {
+function handleClientSideRouting(firstConnection = false) {
 	let currentHash = window.location.hash;
 
 	if (currentHash === "") return;

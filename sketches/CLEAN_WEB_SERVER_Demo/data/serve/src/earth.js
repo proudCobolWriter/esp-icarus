@@ -48,10 +48,13 @@ viewer.scene.postProcessStages.fxaa.enabled = true;
 viewer.scene.backgroundColor = Cesium.Color.BLACK;
 viewer.resolutionScale = window.devicePixelRatio;
 
+viewer.scene.screenSpaceCameraController.zoomFactor = 0.5;
+
 const controller = viewer.scene.screenSpaceCameraController;
 
 controller.enableTilt = false;
 controller.maximumTiltAngle = 0.0;
+controller.maximumZoomDistance = 36000 * 1e3;
 
 const initializeEnvironment = async () => {
 	try {

@@ -1,3 +1,14 @@
+<!-- COPY FROM GITHUB
+
+TO-DO LIST:
+| -> Make remote logs work and implement stream bidirectionality (priority)
+| -> Implement a heartbeat system (system status that accounts a realtime RSSI monitoring, socket client pool size, etc) on the server (priority)
+| -> Implement the graphes status system monitor part
+| -> Build boilerplate for the graphes page?
+\_-> Implement altitude points by accounting ellipsoid deviations, make it so point color depends on altitude
+
+-->
+
 <!doctype html>
 <html lang="en">
 	<head>
@@ -19,7 +30,7 @@
 		</div>
 		<div class="dashboard-container hidden">
 			<header>
-				<div class="logo-area">
+				<div class="logo-area" title="abbreviated EFTS">
 					<h1>ESP32 FC TELEMETRY SYSTEM</h1>
 				</div>
 				<nav>
@@ -32,7 +43,6 @@
 						</svg>
 						<span>Earth Viewer</span>
 					</a>
-
 					<a href="#console" class="nav-card">
 						<svg viewBox="0 0 24 24">
 							<polyline points="4 17 10 11 4 5" />
@@ -40,7 +50,6 @@
 						</svg>
 						<span>Console</span>
 					</a>
-
 					<a href="#graphs" class="nav-card">
 						<svg viewBox="0 0 24 24">
 							<line x1="18" y1="20" x2="18" y2="10" />
@@ -51,25 +60,46 @@
 					</a>
 				</nav>
 			</header>
-			<main>
-				<div class="card">
-					<div class="card-title">Cesium Map Target</div>
-					<div class="text-muted">
-						Your map canvas element container goes here...
+			<main class="main-container text-muted">
+				<div class="card" id="card-map-view">
+					<img class="card-icon no-select-box" id="map-icon" src="/img/map.svg" role="img" alt="A quadcopter icon"></img>
+					<div class="card-title card-title-color">Vehicle Tracking Map</div><hr />
+					<div id="cesium-container" class="spa-view cc-minimized"></div>
+				</div>
+				<div class="card" id="card-system-status">
+					<img class="card-icon no-select-box" id="wifi-icon" src="/img/wifi.svg" role="img" alt="A WiFi icon"></img>
+					<div class="card-title card-title-color">System Status</div><hr />
+					<div class="ts-status-text-container flex-container flex-end">
+						<div class="ts-status-text online">ONLINE</div>
+						<p>for about 10 minutes</p>
+						<p class="flex-item-end">Signal strength: Poor • RSSI: -90 dBm</p>
+					</div>
+					<p class="card-title">Active user pool(<a id="user-pool-count">3</a>):</p>
+					<div id="user-pool">
+						<ul class="flex-container flex-spaced-around">
+							<li>172.0.0.1 (10 mins ago)</li>
+							<li>172.0.0.2 (3 mins ago)</li>
+							<li>172.0.0.3 (1 second ago)</li>
+						</ul>
 					</div>
 				</div>
-				<div class="card">
-					<div class="card-title">System Status</div>
-					<div class="online-text">ONLINE</div>
+				<div class="card" id="card-resource-stats">
+					<img class="card-icon no-select-box" id="stats-icon" src="/img/stats.svg" role="img" alt="A CPU icon"></img>
+					<div class="card-title card-title-color">Onboard Resource Monitor</div><hr />
 				</div>
 			</main>
 		</div>
-		<div id="cesium-container" class="spa-view"></div>
+		<!-- <div id="cesium-container" class="spa-view cc-fullscreen"></div> -->
 		<div id="console-container" class="spa-view">
 			<div id="std-stream">
 				<p class="std-stream-line">
 					[*] Network information for Bbox-31CF9E36
 				</p>
+				<p class="std-stream-line">[+] HTTP Async Server online!</p>
+				<p class="std-stream-line">[+] HTTP Async Server online!</p>
+				<p class="std-stream-line">[+] HTTP Async Server online!</p>
+				<p class="std-stream-line">[+] HTTP Async Server online!</p>
+				<p class="std-stream-line">[+] HTTP Async Server online!</p>
 				<p class="std-stream-line">[+] HTTP Async Server online!</p>
 			</div>
 		</div>

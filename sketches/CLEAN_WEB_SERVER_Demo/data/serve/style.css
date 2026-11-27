@@ -1,3 +1,13 @@
+/* FONTS */
+
+@import url("https://fonts.googleapis.com/css2?family=VT323&display=swap");
+
+.vt323-regular {
+	font-family: "VT323", monospace;
+	font-weight: 400;
+	font-style: normal;
+}
+
 /* GENERAL INHERITED PROPERTIES */
 :root {
 	--bg-main: #0a0f1d;
@@ -6,6 +16,8 @@
 	--text-main: #f8fafc;
 	--text-dashboard: #94a3b8;
 	--text-muted: #64748b;
+	--terminal-line-color: limegreen;
+	--terminal-background-color: black;
 	--separators-color: #64748b;
 	--border-color: #1e293b;
 	--radius: 12px;
@@ -15,15 +27,27 @@
 	box-sizing: border-box;
 	margin: 0;
 	padding: 0;
-	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+	font-family:
+		-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
 html {
-	background: var(--bg-main);
 	color: var(--text-main);
-	min-height: 100vh;
+	background: var(--bg-main);
+	height: 100%;
 	display: flex;
 	flex-direction: column;
+	justify-content: center;
+	align-content: center;
+	margin: 0;
+	padding: 0;
+	box-sizing: border-box; /* expands padding inward instead of outward */
+}
+
+*,
+*::before,
+*::after {
+	box-sizing: inherit;
 }
 
 /* CESIUM EARTH STYLE */
@@ -34,14 +58,6 @@ html {
 
 #cesium.container.cc-minimized {
 	display: block;
-}
-
-#cesium-container.cc-fullscreen {
-	position: absolute;
-	top: 0;
-	left: 0;
-	width: 100vw;
-	height: 100vh;
 }
 
 /* LOADING SCREEN */
@@ -78,7 +94,8 @@ html {
 	color: var(--text-muted);
 }
 
-.ts-status-text { /* ts meaning three state */
+.ts-status-text {
+	/* ts meaning three state */
 	font-size: 2rem;
 	font-weight: bold;
 	margin-right: 4px;
@@ -162,7 +179,8 @@ hr {
 	margin: 10px 0;
 }
 
-ul, li {
+ul,
+li {
 	display: inline-block;
 }
 
@@ -252,7 +270,8 @@ main {
 }
 
 #wifi-icon {
-	transform: rotateZ(-125deg) rotateX(20deg) rotateY(-35deg) scale3d(2, 1.5, 1) translate(7.5px, 15px);
+	transform: rotateZ(-125deg) rotateX(20deg) rotateY(-35deg)
+		scale3d(2, 1.5, 1) translate(7.5px, 15px);
 }
 
 #stats-icon {
@@ -323,18 +342,20 @@ main {
 	justify-content: space-between;
 }
 
-/* CONSOLE STREAM */
+/* GENERAL RULES */
 
-#console-container {
+.fullscreen {
 	position: absolute;
 	top: 0;
 	left: 0;
 	width: 100vw;
 	height: 100vh;
-	align-items: end;
 }
 
-#std-stream {
+/* CONSOLE STREAM */
+
+/* OLD STYLE
+.std-stream-output {
 	display: flex;
 	flex-direction: column-reverse;
 	align-items: start;
@@ -344,7 +365,7 @@ main {
 	margin: 10px;
 	box-shadow: 0px 0px 15px 2px #7Cbdbd inset;
 	border: 2px solid #3acaec;
-	border-radius: 10px;
+	border-radius: var(--radius);
 	overflow-y: scroll;
 	overflow-x: hidden;
 	position: absolute;
@@ -359,6 +380,76 @@ main {
 	margin-bottom: 5px;
 	font-family: "Oxygen Mono", Consolas, monaco, monospace;
 	font-weight: 400;
+}
+*/
+
+.std-stream-line {
+	font-family: "VT323", monospace;
+	font-weight: 400;
+	font-style: normal;
+	font-size: 2rem;
+	color: var(--terminal-line-color);
+}
+
+.std-stream-output {
+	flex-direction: column-reverse;
+	background-color: black;
+	padding: 10px 10px 0 10px;
+	height: calc(100vh - 2rem - 10px);
+}
+
+.std-stream-input-wrapper {
+	position: absolute;
+	bottom: 0;
+	left: 0;
+	width: 100vw;
+	padding: 0 10px 10px 10px;
+	background-color: var(--terminal-background-color);
+	gap: 8px;
+	align-items: center;
+}
+
+.std-stream-input-wrapper span:first-child {
+	flex-shrink: 0;
+	user-select: none;
+}
+
+.std-stream-input {
+	flex-grow: 1;
+	min-width: 0;
+	white-space: nowrap;
+	overflow: hidden;
+	outline: none;
+	border: none;
+	caret-color: transparent; /* hides the default thin line cursor for my custom one */
+}
+
+.std-stream-input br {
+	display: none; /* prevents user-driven ENTER key-presses that expand over multiple lines the input box */
+}
+
+.std-stream-input::after {
+	display: inline-block;
+	content: "";
+	width: 10px;
+	height: 1.5rem;
+	background-color: var(--terminal-line-color);
+	vertical-align: middle;
+	margin-left: 2px;
+	animation: blink 2s step-end infinite;
+}
+
+.std-stream-input:empty::before {
+	content: attr(placeholder);
+	color: var(--terminal-line-color);
+	opacity: 0.4;
+	pointer-events: none;
+}
+
+@keyframes blink {
+	50% {
+		opacity: 0;
+	}
 }
 
 /* LOADING SPINNER CSS FROM https://cssloaders.github.io/ */

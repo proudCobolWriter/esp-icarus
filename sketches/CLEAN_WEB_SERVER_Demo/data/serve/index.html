@@ -89,9 +89,9 @@ TO-DO LIST:
 				</div>
 			</main>
 		</div>
-		<!-- <div id="cesium-container" class="spa-view cc-fullscreen"></div> -->
-		<div id="console-container" class="spa-view">
-			<div id="std-stream">
+		<!-- <div id="cesium-container" class="spa-view fullscreen"></div> -->
+		<div id="console-container" class="spa-view fullscreen">
+			<div class="std-stream-output flex-container">
 				<p class="std-stream-line">
 					[*] Network information for Bbox-31CF9E36
 				</p>
@@ -101,6 +101,16 @@ TO-DO LIST:
 				<p class="std-stream-line">[+] HTTP Async Server online!</p>
 				<p class="std-stream-line">[+] HTTP Async Server online!</p>
 				<p class="std-stream-line">[+] HTTP Async Server online!</p>
+			</div>
+			<div class="std-stream-input-wrapper flex-container">
+				<span class="std-stream-line">&gt;</span>
+				<span
+					class="std-stream-line std-stream-input"
+					contenteditable="true"
+					role="textbox"
+					spellcheck="false"
+					placeholder="type your command..."
+				></span>
 			</div>
 		</div>
 		<div id="graphs-container" class="spa-view"></div>
